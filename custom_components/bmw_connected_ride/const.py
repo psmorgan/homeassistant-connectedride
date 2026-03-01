@@ -27,3 +27,6 @@ TOKEN_REFRESH_BUFFER_SECONDS = 300
 
 # Config entry key for region selection
 CONF_REGION = "region"
+
+# Platform types to set up
+PLATFORMS: list[str] = ["sensor"]
