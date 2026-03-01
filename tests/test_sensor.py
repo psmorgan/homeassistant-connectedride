@@ -1,6 +1,6 @@
 """Tests for BMW Connected Ride sensor platform."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import MagicMock, AsyncMock
 
 import pytest
@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.const import PERCENTAGE, UnitOfLength
+from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfPressure
 
 from custom_components.bmw_connected_ride.const import DOMAIN
 from custom_components.bmw_connected_ride.sensor import (
@@ -22,6 +22,14 @@ from custom_components.bmw_connected_ride.sensor import (
     _fuel_level_value,
     _remaining_range_value,
     _last_sync_value,
+    _energy_level_value,
+    _electric_range_value,
+    _front_tire_pressure_value,
+    _rear_tire_pressure_value,
+    _mileage_value,
+    _trip_distance_value,
+    _next_service_date_value,
+    _next_service_distance_value,
     async_setup_entry,
 )
 
@@ -36,6 +44,14 @@ BIKE_WITH_NAME = {
     "fuelLevel": 72,
     "remainingRange": 245000.0,
     "lastConnectedTime": 1735689600,
+    "energyLevel": 85,
+    "remainingRangeElectric": 130000.0,
+    "tirePressureFront": 2.5,
+    "tirePressureRear": 2.9,
+    "totalMileage": 25432000.0,
+    "trip1": 345600.0,
+    "nextServiceDueDate": 1751328000,
+    "nextServiceRemainingDistance": 8500000.0,
     "_deleted": False,
 }
 
@@ -45,6 +61,14 @@ BIKE_NO_NAME = {
     "fuelLevel": 45,
     "remainingRange": 120000.0,
     "lastConnectedTime": 1735600000,
+    "energyLevel": 85,
+    "remainingRangeElectric": 130000.0,
+    "tirePressureFront": 2.5,
+    "tirePressureRear": 2.9,
+    "totalMileage": 25432000.0,
+    "trip1": 345600.0,
+    "nextServiceDueDate": 1751328000,
+    "nextServiceRemainingDistance": 8500000.0,
     "_deleted": False,
 }
 
@@ -54,6 +78,14 @@ BIKE_EMPTY_NAME = {
     "fuelLevel": 90,
     "remainingRange": 300000.0,
     "lastConnectedTime": 1735700000,
+    "energyLevel": 85,
+    "remainingRangeElectric": 130000.0,
+    "tirePressureFront": 2.5,
+    "tirePressureRear": 2.9,
+    "totalMileage": 25432000.0,
+    "trip1": 345600.0,
+    "nextServiceDueDate": 1751328000,
+    "nextServiceRemainingDistance": 8500000.0,
     "_deleted": False,
 }
 
@@ -136,6 +168,107 @@ class TestLastSyncValue:
         assert _last_sync_value(bike) is None
 
 
+class TestEnergyLevelValue:
+    """Tests for _energy_level_value."""
+
+    def test_returns_energy_level_integer(self):
+        assert _energy_level_value(BIKE_WITH_NAME) == 85
+
+    def test_returns_none_when_missing(self):
+        assert _energy_level_value(BIKE_MISSING_FIELDS) is None
+
+
+class TestElectricRangeValue:
+    """Tests for _electric_range_value."""
+
+    def test_converts_meters_to_km(self):
+        assert _electric_range_value(BIKE_WITH_NAME) == 130.0
+
+    def test_returns_none_when_missing(self):
+        assert _electric_range_value(BIKE_MISSING_FIELDS) is None
+
+    def test_returns_none_when_none(self):
+        assert _electric_range_value({"remainingRangeElectric": None}) is None
+
+
+class TestFrontTirePressureValue:
+    """Tests for _front_tire_pressure_value."""
+
+    def test_returns_pressure_float(self):
+        assert _front_tire_pressure_value(BIKE_WITH_NAME) == 2.5
+
+    def test_returns_none_when_missing(self):
+        assert _front_tire_pressure_value(BIKE_MISSING_FIELDS) is None
+
+
+class TestRearTirePressureValue:
+    """Tests for _rear_tire_pressure_value."""
+
+    def test_returns_pressure_float(self):
+        assert _rear_tire_pressure_value(BIKE_WITH_NAME) == 2.9
+
+    def test_returns_none_when_missing(self):
+        assert _rear_tire_pressure_value(BIKE_MISSING_FIELDS) is None
+
+
+class TestMileageValue:
+    """Tests for _mileage_value."""
+
+    def test_converts_meters_to_km(self):
+        assert _mileage_value(BIKE_WITH_NAME) == 25432.0
+
+    def test_returns_none_when_missing(self):
+        assert _mileage_value(BIKE_MISSING_FIELDS) is None
+
+    def test_returns_none_when_none(self):
+        assert _mileage_value({"totalMileage": None}) is None
+
+
+class TestTripDistanceValue:
+    """Tests for _trip_distance_value."""
+
+    def test_converts_meters_to_km(self):
+        assert _trip_distance_value(BIKE_WITH_NAME) == 345.6
+
+    def test_returns_none_when_missing(self):
+        assert _trip_distance_value(BIKE_MISSING_FIELDS) is None
+
+    def test_returns_none_when_none(self):
+        assert _trip_distance_value({"trip1": None}) is None
+
+
+class TestNextServiceDateValue:
+    """Tests for _next_service_date_value."""
+
+    def test_returns_date_not_datetime(self):
+        result = _next_service_date_value(BIKE_WITH_NAME)
+        assert isinstance(result, date)
+        assert not isinstance(result, datetime)  # date, NOT datetime
+
+    def test_correct_date_conversion(self):
+        result = _next_service_date_value(BIKE_WITH_NAME)
+        assert result == date(2025, 7, 1)  # epoch 1751328000 = 2025-07-01 UTC
+
+    def test_returns_none_when_missing(self):
+        assert _next_service_date_value(BIKE_MISSING_FIELDS) is None
+
+    def test_returns_none_when_none(self):
+        assert _next_service_date_value({"nextServiceDueDate": None}) is None
+
+
+class TestNextServiceDistanceValue:
+    """Tests for _next_service_distance_value."""
+
+    def test_converts_meters_to_km(self):
+        assert _next_service_distance_value(BIKE_WITH_NAME) == 8500.0
+
+    def test_returns_none_when_missing(self):
+        assert _next_service_distance_value(BIKE_MISSING_FIELDS) is None
+
+    def test_returns_none_when_none(self):
+        assert _next_service_distance_value({"nextServiceRemainingDistance": None}) is None
+
+
 # ---------------------------------------------------------------------------
 # Sensor description tests
 # ---------------------------------------------------------------------------
@@ -144,9 +277,9 @@ class TestLastSyncValue:
 class TestSensorDescriptions:
     """Tests for SENSOR_DESCRIPTIONS tuple."""
 
-    def test_three_descriptions_defined(self):
-        """Three sensor types defined."""
-        assert len(SENSOR_DESCRIPTIONS) == 3
+    def test_eleven_descriptions_defined(self):
+        """Eleven sensor types defined (3 existing + 8 new)."""
+        assert len(SENSOR_DESCRIPTIONS) == 11
 
     def test_fuel_level_description(self):
         """ENTY-03: Fuel level has correct attributes."""
@@ -170,6 +303,50 @@ class TestSensorDescriptions:
         desc = SENSOR_DESCRIPTIONS[2]
         assert desc.key == "last_sync"
         assert desc.device_class == SensorDeviceClass.TIMESTAMP
+
+    def test_energy_level_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "energy_level"][0]
+        assert desc.native_unit_of_measurement == PERCENTAGE
+        assert desc.state_class == SensorStateClass.MEASUREMENT
+        assert desc.device_class is None
+        assert desc.entity_registry_enabled_default is False
+
+    def test_electric_range_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "electric_range"][0]
+        assert desc.device_class == SensorDeviceClass.DISTANCE
+        assert desc.native_unit_of_measurement == UnitOfLength.KILOMETERS
+        assert desc.entity_registry_enabled_default is False
+
+    def test_front_tire_pressure_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "front_tire_pressure"][0]
+        assert desc.device_class == SensorDeviceClass.PRESSURE
+        assert desc.native_unit_of_measurement == UnitOfPressure.BAR
+        assert desc.state_class == SensorStateClass.MEASUREMENT
+
+    def test_rear_tire_pressure_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "rear_tire_pressure"][0]
+        assert desc.device_class == SensorDeviceClass.PRESSURE
+        assert desc.native_unit_of_measurement == UnitOfPressure.BAR
+
+    def test_mileage_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "mileage"][0]
+        assert desc.device_class == SensorDeviceClass.DISTANCE
+        assert desc.native_unit_of_measurement == UnitOfLength.KILOMETERS
+        assert desc.state_class == SensorStateClass.TOTAL_INCREASING
+
+    def test_trip_distance_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "trip_distance"][0]
+        assert desc.device_class == SensorDeviceClass.DISTANCE
+        assert desc.state_class == SensorStateClass.MEASUREMENT
+
+    def test_next_service_date_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "next_service_date"][0]
+        assert desc.device_class == SensorDeviceClass.DATE
+
+    def test_next_service_distance_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "next_service_distance"][0]
+        assert desc.device_class == SensorDeviceClass.DISTANCE
+        assert desc.state_class is None  # remaining distance decreases, not a measurement
 
 
 # ---------------------------------------------------------------------------
@@ -285,8 +462,8 @@ class TestAsyncSetupEntry:
     """Tests for async_setup_entry."""
 
     @pytest.mark.asyncio
-    async def test_creates_three_sensors_per_bike(self):
-        """3 sensors per bike: fuel_level, remaining_range, last_sync."""
+    async def test_creates_eleven_sensors_per_bike(self):
+        """11 sensors per bike: 3 existing + 8 new."""
         coordinator = _make_mock_coordinator({
             "VIN001": BIKE_WITH_NAME,
         })
@@ -297,11 +474,11 @@ class TestAsyncSetupEntry:
 
         await async_setup_entry(MagicMock(), entry, async_add_entities)
 
-        assert len(added_entities) == 3
+        assert len(added_entities) == 11
 
     @pytest.mark.asyncio
-    async def test_creates_six_sensors_for_two_bikes(self):
-        """2 bikes = 6 entities total."""
+    async def test_creates_twentytwo_sensors_for_two_bikes(self):
+        """2 bikes = 22 entities total."""
         coordinator = _make_mock_coordinator({
             "VIN001": BIKE_WITH_NAME,
             "VIN002": BIKE_NO_NAME,
@@ -313,7 +490,7 @@ class TestAsyncSetupEntry:
 
         await async_setup_entry(MagicMock(), entry, async_add_entities)
 
-        assert len(added_entities) == 6
+        assert len(added_entities) == 22
 
     @pytest.mark.asyncio
     async def test_all_entities_are_bmw_bike_sensor(self):

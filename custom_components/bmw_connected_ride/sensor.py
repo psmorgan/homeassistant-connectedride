@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -12,7 +12,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfLength
+from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfPressure
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -48,6 +48,61 @@ def _last_sync_value(bike: dict) -> datetime | None:
     return datetime.fromtimestamp(ts, tz=timezone.utc)
 
 
+def _energy_level_value(bike: dict) -> int | None:
+    """Extract energy level (battery percentage) -- no conversion needed."""
+    return bike.get("energyLevel")
+
+
+def _electric_range_value(bike: dict) -> float | None:
+    """Convert electric remaining range from meters to kilometres."""
+    raw = bike.get("remainingRangeElectric")
+    if raw is None:
+        return None
+    return round(raw / 1000, 1)
+
+
+def _front_tire_pressure_value(bike: dict) -> float | None:
+    """Extract front tire pressure in bar -- no conversion needed."""
+    return bike.get("tirePressureFront")
+
+
+def _rear_tire_pressure_value(bike: dict) -> float | None:
+    """Extract rear tire pressure in bar -- no conversion needed."""
+    return bike.get("tirePressureRear")
+
+
+def _mileage_value(bike: dict) -> float | None:
+    """Convert total mileage from meters to kilometres."""
+    raw = bike.get("totalMileage")
+    if raw is None:
+        return None
+    return round(raw / 1000, 1)
+
+
+def _trip_distance_value(bike: dict) -> float | None:
+    """Convert trip distance from meters to kilometres."""
+    raw = bike.get("trip1")
+    if raw is None:
+        return None
+    return round(raw / 1000, 1)
+
+
+def _next_service_date_value(bike: dict) -> date | None:
+    """Convert next service due date from epoch seconds to date."""
+    ts = bike.get("nextServiceDueDate")
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(ts, tz=timezone.utc).date()
+
+
+def _next_service_distance_value(bike: dict) -> float | None:
+    """Convert next service remaining distance from meters to kilometres."""
+    raw = bike.get("nextServiceRemainingDistance")
+    if raw is None:
+        return None
+    return round(raw / 1000, 1)
+
+
 SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="fuel_level",
@@ -69,6 +124,74 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
         translation_key="last_sync",
         device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=_last_sync_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="energy_level",
+        translation_key="energy_level",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=_energy_level_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="electric_range",
+        translation_key="electric_range",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        entity_registry_enabled_default=False,
+        value_fn=_electric_range_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="front_tire_pressure",
+        translation_key="front_tire_pressure",
+        device_class=SensorDeviceClass.PRESSURE,
+        native_unit_of_measurement=UnitOfPressure.BAR,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_front_tire_pressure_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="rear_tire_pressure",
+        translation_key="rear_tire_pressure",
+        device_class=SensorDeviceClass.PRESSURE,
+        native_unit_of_measurement=UnitOfPressure.BAR,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_rear_tire_pressure_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="mileage",
+        translation_key="mileage",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=1,
+        value_fn=_mileage_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="trip_distance",
+        translation_key="trip_distance",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_trip_distance_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="next_service_date",
+        translation_key="next_service_date",
+        device_class=SensorDeviceClass.DATE,
+        value_fn=_next_service_date_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="next_service_distance",
+        translation_key="next_service_distance",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        suggested_display_precision=1,
+        value_fn=_next_service_distance_value,
     ),
 )
 

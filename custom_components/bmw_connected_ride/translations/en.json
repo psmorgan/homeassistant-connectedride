@@ -3,7 +3,15 @@
     "sensor": {
       "fuel_level": { "name": "Fuel level" },
       "remaining_range": { "name": "Remaining range" },
-      "last_sync": { "name": "Last sync" }
+      "last_sync": { "name": "Last sync" },
+      "energy_level": { "name": "Energy level" },
+      "electric_range": { "name": "Electric range" },
+      "front_tire_pressure": { "name": "Front tire pressure" },
+      "rear_tire_pressure": { "name": "Rear tire pressure" },
+      "mileage": { "name": "Mileage" },
+      "trip_distance": { "name": "Trip distance" },
+      "next_service_date": { "name": "Next service date" },
+      "next_service_distance": { "name": "Next service distance" }
     }
   },
   "config": {
