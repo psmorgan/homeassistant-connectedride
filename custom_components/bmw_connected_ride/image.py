@@ -38,6 +38,7 @@ class BMWBikeImage(CoordinatorEntity[BMWConnectedRideCoordinator], ImageEntity):
     ) -> None:
         """Initialize the image entity."""
         super().__init__(coordinator)
+        ImageEntity.__init__(self, coordinator.hass)
         self._vin = vin
         self._attr_unique_id = f"{vin}_image_{view['key']}"
         self._attr_name = view["label"]
