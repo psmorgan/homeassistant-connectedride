@@ -12,6 +12,9 @@
       "trip_distance": { "name": "Trip distance" },
       "next_service_date": { "name": "Next service date" },
       "next_service_distance": { "name": "Next service distance" }
+    },
+    "device_tracker": {
+      "gps_location": { "name": "GPS location" }
     }
   },
   "config": {
