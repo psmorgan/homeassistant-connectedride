@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BMW Connected Ride",
+        "description": "Connect your BMW motorcycle to Home Assistant.",
+        "data": {
+          "region": "Region"
+        },
+        "data_description": {
+          "region": "Select the region for your BMW account."
+        }
+      },
+      "timeout": {
+        "title": "Authentication Timed Out",
+        "description": "The authentication request expired. Please try again."
+      },
+      "finish": {
+        "title": "Success",
+        "description": "Your BMW account has been connected successfully."
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate BMW Connected Ride",
+        "description": "Your BMW authentication has expired. Please re-authenticate to continue receiving motorcycle data."
+      }
+    },
+    "progress": {
+      "wait_for_device": "Open the following URL and sign in with your BMW account:\n\n**[Sign in to BMW]({url})**\n\nEnter this code when prompted:\n\n## {code}\n\nWaiting for authentication..."
+    },
+    "error": {
+      "timeout": "Authentication timed out. Please try again.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This region is already configured.",
+      "reauth_successful": "Re-authentication successful."
+    }
+  }
+}
