@@ -2,3 +2,4 @@ apk/
 scripts/
 .planning/
 
+__pycache__
