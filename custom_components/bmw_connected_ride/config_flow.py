@@ -155,8 +155,8 @@ class BMWConnectedRideConfigFlow(ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
 
         # Check if we're in a reauth context
-        reauth_entry = self._get_reauth_entry() if hasattr(self, "_get_reauth_entry") else None
-        if reauth_entry is not None:
+        if self.source == "reauth":
+            reauth_entry = self._get_reauth_entry()
             _LOGGER.debug("Reauth complete, updating config entry for region %s", self._region)
             return self.async_update_reload_and_abort(
                 reauth_entry,
