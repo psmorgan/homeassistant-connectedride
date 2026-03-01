@@ -12,7 +12,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from custom_components.bmw_connected_ride.api import BMWApiClient, BIKES_PATH
+from custom_components.bmw_connected_ride.api import (
+    BMWApiClient,
+    BIKES_PATH,
+    STATICDATA_PATH,
+    STATICDATA_API_KEY,
+    _extract_image_views,
+)
 from custom_components.bmw_connected_ride.auth import BMWAuthError
 from custom_components.bmw_connected_ride.const import REGION_CONFIGS
 
@@ -70,6 +76,13 @@ def _make_mock_session(response):
     """Create a mock aiohttp session with a GET response."""
     session = MagicMock(spec=aiohttp.ClientSession)
     session.get = MagicMock(return_value=response)
+    return session
+
+
+def _make_mock_post_session(response):
+    """Create a mock aiohttp session with a POST response."""
+    session = MagicMock(spec=aiohttp.ClientSession)
+    session.post = MagicMock(return_value=response)
     return session
 
 
@@ -227,3 +240,152 @@ class TestAsyncGetBikes:
         expected_url = f"{REGION_CONFIGS['NA']['api_base_url']}/{BIKES_PATH}"
         call_args = session.get.call_args
         assert call_args[0][0] == expected_url
+
+
+# ---------------------------------------------------------------------------
+# TestAsyncGetVehicleInfo
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncGetVehicleInfo:
+    """Tests for BMWApiClient.async_get_vehicle_info."""
+
+    @pytest.mark.asyncio
+    async def test_returns_first_item_from_list(self):
+        """Returns first item from a list response."""
+        item = {"vin": "WB10X0X00X0XXXXXX", "images": {}}
+        resp = _make_mock_response(200, json_data=[item])
+        session = _make_mock_post_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        result = await client.async_get_vehicle_info(vin="WB10X0X00X0XXXXXX", type_key="K66", abs_type="0K03")
+        assert result == item
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_dict_for_empty_list(self):
+        """Returns {} when response is an empty list."""
+        resp = _make_mock_response(200, json_data=[])
+        session = _make_mock_post_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        result = await client.async_get_vehicle_info(vin="WB10X0X00X0XXXXXX")
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_dict_on_403(self):
+        """Returns {} (and logs warning) on 403 response."""
+        resp = _make_mock_response(403)
+        session = _make_mock_post_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        result = await client.async_get_vehicle_info(vin="WB10X0X00X0XXXXXX")
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_401_raises_bmw_auth_error(self):
+        """HTTP 401 raises BMWAuthError."""
+        resp = _make_mock_response(401)
+        session = _make_mock_post_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        with pytest.raises(BMWAuthError, match="401"):
+            await client.async_get_vehicle_info(vin="WB10X0X00X0XXXXXX")
+
+    @pytest.mark.asyncio
+    async def test_sends_correct_headers_and_body(self):
+        """Sends x-cd-apigw-key header (not Bearer) and correct JSON body."""
+        resp = _make_mock_response(200, json_data=[{}])
+        session = _make_mock_post_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        await client.async_get_vehicle_info(vin="WB10X0X00X0XXXXXX", type_key="K66", abs_type="0K03")
+        call_kwargs = session.post.call_args
+        headers = call_kwargs.kwargs.get("headers", {})
+        assert "x-cd-apigw-key" in headers
+        assert headers["x-cd-apigw-key"] == STATICDATA_API_KEY
+        assert "Authorization" not in headers
+        body = call_kwargs.kwargs.get("json", {})
+        assert body == {"vin": "WB10X0X00X0XXXXXX", "typeKey": "K66", "absType": "0K03"}
+
+    @pytest.mark.asyncio
+    async def test_omits_optional_params_when_none(self):
+        """Body omits typeKey and absType when not provided."""
+        resp = _make_mock_response(200, json_data=[{}])
+        session = _make_mock_post_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        await client.async_get_vehicle_info(vin="WB10X0X00X0XXXXXX")
+        call_kwargs = session.post.call_args
+        body = call_kwargs.kwargs.get("json", {})
+        assert body == {"vin": "WB10X0X00X0XXXXXX"}
+        assert "typeKey" not in body
+        assert "absType" not in body
+
+    @pytest.mark.asyncio
+    async def test_uses_staticdata_url(self):
+        """POSTs to the correct staticdata URL."""
+        resp = _make_mock_response(200, json_data=[{}])
+        session = _make_mock_post_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        await client.async_get_vehicle_info(vin="WB10X0X00X0XXXXXX")
+        expected_url = f"{TEST_BASE_URL}/{STATICDATA_PATH}"
+        call_args = session.post.call_args
+        assert call_args.args[0] == expected_url
+
+
+# ---------------------------------------------------------------------------
+# TestExtractImageViews
+# ---------------------------------------------------------------------------
+
+
+class TestExtractImageViews:
+    """Tests for _extract_image_views helper."""
+
+    def test_extracts_side_view(self):
+        info = {"images": {"sideViews": [{"url": "https://example.com/side.png", "colorCode": "P0H0L"}]}}
+        views = _extract_image_views(info)
+        assert len(views) == 1
+        assert views[0] == {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+
+    def test_extracts_rider_view(self):
+        info = {"images": {"riderViews": [{"url": "https://example.com/rider.png"}]}}
+        views = _extract_image_views(info)
+        assert len(views) == 1
+        assert views[0] == {"key": "riderViews", "label": "Rider View", "url": "https://example.com/rider.png"}
+
+    def test_extracts_both_views(self):
+        info = {"images": {
+            "sideViews": [{"url": "https://example.com/side.png"}],
+            "riderViews": [{"url": "https://example.com/rider.png"}],
+        }}
+        views = _extract_image_views(info)
+        assert len(views) == 2
+        assert views[0]["key"] == "sideViews"
+        assert views[1]["key"] == "riderViews"
+
+    def test_excludes_color_tiles(self):
+        info = {"images": {
+            "colorTiles": [{"url": "https://example.com/tile.png"}],
+            "sideViews": [{"url": "https://example.com/side.png"}],
+        }}
+        views = _extract_image_views(info)
+        assert len(views) == 1
+        assert views[0]["key"] == "sideViews"
+
+    def test_returns_empty_when_no_images(self):
+        assert _extract_image_views({}) == []
+
+    def test_returns_empty_when_images_is_none(self):
+        assert _extract_image_views({"images": None}) == []
+
+    def test_skips_entries_without_url(self):
+        info = {"images": {"sideViews": [{"colorCode": "P0H0L"}]}}
+        assert _extract_image_views(info) == []
+
+    def test_multiple_entries_get_indexed_keys(self):
+        info = {"images": {"sideViews": [
+            {"url": "https://example.com/side1.png"},
+            {"url": "https://example.com/side2.png"},
+        ]}}
+        views = _extract_image_views(info)
+        assert len(views) == 2
+        assert views[0] == {"key": "sideViews_0", "label": "Side View 1", "url": "https://example.com/side1.png"}
+        assert views[1] == {"key": "sideViews_1", "label": "Side View 2", "url": "https://example.com/side2.png"}
+
+    def test_handles_empty_side_views_list(self):
+        info = {"images": {"sideViews": []}}
+        assert _extract_image_views(info) == []
