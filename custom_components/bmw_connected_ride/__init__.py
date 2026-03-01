@@ -37,6 +37,7 @@ async def async_setup_entry(
     coordinator = BMWConnectedRideCoordinator(hass, entry, auth_client, api_client)
 
     await coordinator.async_config_entry_first_refresh()
+    await coordinator.async_fetch_vehicle_info()
 
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
