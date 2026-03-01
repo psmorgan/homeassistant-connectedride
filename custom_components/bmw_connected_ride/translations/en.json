@@ -1,4 +1,11 @@
 {
+  "entity": {
+    "sensor": {
+      "fuel_level": { "name": "Fuel level" },
+      "remaining_range": { "name": "Remaining range" },
+      "last_sync": { "name": "Last sync" }
+    }
+  },
   "config": {
     "step": {
       "user": {
