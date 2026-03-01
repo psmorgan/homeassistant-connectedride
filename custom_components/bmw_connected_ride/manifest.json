@@ -1,0 +1,12 @@
+{
+  "domain": "bmw_connected_ride",
+  "name": "BMW Connected Ride",
+  "codeowners": ["@psmorgan"],
+  "config_flow": true,
+  "documentation": "https://github.com/psmorgan/homeassistant-connectedride",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/psmorgan/homeassistant-connectedride/issues",
+  "version": "0.1.0",
+  "requirements": []
+}
