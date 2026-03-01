@@ -1,5 +1,6 @@
 """Tests for the BMW Connected Ride image platform."""
 
+import collections
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import datetime, timezone
@@ -24,7 +25,15 @@ def _make_coordinator(bikes=None, vehicle_info=None):
     coordinator = MagicMock()
     coordinator.data = bikes or {TEST_VIN: TEST_BIKE}
     coordinator.vehicle_info = vehicle_info or {}
+    coordinator.hass = MagicMock()
     return coordinator
+
+
+@pytest.fixture(autouse=True)
+def patch_get_async_client():
+    """Patch get_async_client so ImageEntity.__init__ does not need a real HA instance."""
+    with patch("homeassistant.components.image.get_async_client", return_value=MagicMock()):
+        yield
 
 
 class TestBMWBikeImage:
@@ -87,6 +96,21 @@ class TestBMWBikeImage:
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert entity.unique_id == f"{TEST_VIN}_image_sideViews_0"
         assert entity.name == "Side View 1"
+
+    def test_has_access_tokens_attribute(self):
+        """BMWBikeImage has access_tokens attribute (deque) — regression for MRO gap."""
+        coordinator = _make_coordinator()
+        view = {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+        entity = BMWBikeImage(coordinator, TEST_VIN, view)
+        assert hasattr(entity, "access_tokens"), "access_tokens attribute missing — ImageEntity.__init__ not called"
+        assert isinstance(entity.access_tokens, collections.deque)
+
+    def test_has_http_client_attribute(self):
+        """BMWBikeImage has _client attribute — regression for MRO gap."""
+        coordinator = _make_coordinator()
+        view = {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+        entity = BMWBikeImage(coordinator, TEST_VIN, view)
+        assert hasattr(entity, "_client"), "_client attribute missing — ImageEntity.__init__ not called"
 
 
 class TestImagePlatformSetup:
