@@ -40,28 +40,29 @@ class TestBMWBikeImage:
     """Tests for BMWBikeImage entity."""
 
     def test_entity_attributes_from_side_view(self):
-        """Entity has correct unique_id, name, and image_url from side view."""
+        """Entity has correct unique_id, translation_key, and image_url from side view."""
         coordinator = _make_coordinator()
-        view = {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+        view = {"key": "sideViews", "url": "https://example.com/side.png"}
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert entity.unique_id == f"{TEST_VIN}_image_sideViews"
-        assert entity.name == "Side View"
+        assert entity.translation_key == "sideViews"
+        assert not hasattr(entity, '_attr_name') or entity._attr_name is None
         assert entity.image_url == "https://example.com/side.png"
         assert entity.content_type == "image/png"
 
     def test_entity_attributes_from_rider_view(self):
-        """Entity has correct unique_id and name from rider view."""
+        """Entity has correct unique_id and translation_key from rider view."""
         coordinator = _make_coordinator()
-        view = {"key": "riderViews", "label": "Rider View", "url": "https://example.com/rider.png"}
+        view = {"key": "riderViews", "url": "https://example.com/rider.png"}
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert entity.unique_id == f"{TEST_VIN}_image_riderViews"
-        assert entity.name == "Rider View"
+        assert entity.translation_key == "riderViews"
         assert entity.image_url == "https://example.com/rider.png"
 
     def test_entity_linked_to_device(self):
         """Entity is linked to the correct HA device via DeviceInfo."""
         coordinator = _make_coordinator()
-        view = {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+        view = {"key": "sideViews", "url": "https://example.com/side.png"}
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert entity.device_info["identifiers"] == {(DOMAIN, TEST_VIN)}
         assert entity.device_info["name"] == "My R1250GS"
@@ -70,7 +71,7 @@ class TestBMWBikeImage:
     def test_image_last_updated_is_set(self):
         """image_last_updated is set (not None) so HA will download the image."""
         coordinator = _make_coordinator()
-        view = {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+        view = {"key": "sideViews", "url": "https://example.com/side.png"}
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert entity.image_last_updated is not None
         assert isinstance(entity.image_last_updated, datetime)
@@ -78,29 +79,29 @@ class TestBMWBikeImage:
     def test_has_entity_name_true(self):
         """has_entity_name is True so HA prepends device name."""
         coordinator = _make_coordinator()
-        view = {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+        view = {"key": "sideViews", "url": "https://example.com/side.png"}
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert entity.has_entity_name is True
 
     def test_device_name_fallback_to_vin(self):
         """Device name falls back to VIN when bike has no name."""
         coordinator = _make_coordinator(bikes={TEST_VIN: {"vin": TEST_VIN}})
-        view = {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+        view = {"key": "sideViews", "url": "https://example.com/side.png"}
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert entity.device_info["name"] == TEST_VIN
 
-    def test_indexed_view_key(self):
-        """Multiple views of same type get indexed unique_ids."""
+    def test_translation_key_matches_view_key(self):
+        """translation_key is set to the view key from the view dict."""
         coordinator = _make_coordinator()
-        view = {"key": "sideViews_0", "label": "Side View 1", "url": "https://example.com/side1.png"}
+        view = {"key": "sideViews", "url": "https://example.com/side.png"}
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
-        assert entity.unique_id == f"{TEST_VIN}_image_sideViews_0"
-        assert entity.name == "Side View 1"
+        assert entity.translation_key == "sideViews"
+        assert entity.unique_id == f"{TEST_VIN}_image_sideViews"
 
     def test_has_access_tokens_attribute(self):
         """BMWBikeImage has access_tokens attribute (deque) — regression for MRO gap."""
         coordinator = _make_coordinator()
-        view = {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+        view = {"key": "sideViews", "url": "https://example.com/side.png"}
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert hasattr(entity, "access_tokens"), "access_tokens attribute missing — ImageEntity.__init__ not called"
         assert isinstance(entity.access_tokens, collections.deque)
@@ -108,9 +109,16 @@ class TestBMWBikeImage:
     def test_has_http_client_attribute(self):
         """BMWBikeImage has _client attribute — regression for MRO gap."""
         coordinator = _make_coordinator()
-        view = {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+        view = {"key": "sideViews", "url": "https://example.com/side.png"}
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert hasattr(entity, "_client"), "_client attribute missing — ImageEntity.__init__ not called"
+
+    def test_no_attr_name_set(self):
+        """_attr_name must not be set — translation_key handles entity naming."""
+        coordinator = _make_coordinator()
+        view = {"key": "sideViews", "url": "https://example.com/side.png"}
+        entity = BMWBikeImage(coordinator, TEST_VIN, view)
+        assert not hasattr(entity, '_attr_name') or entity._attr_name is None
 
 
 class TestImagePlatformSetup:

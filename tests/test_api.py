@@ -339,13 +339,13 @@ class TestExtractImageViews:
         info = {"images": {"sideViews": [{"url": "https://example.com/side.png", "colorCode": "P0H0L"}]}}
         views = _extract_image_views(info)
         assert len(views) == 1
-        assert views[0] == {"key": "sideViews", "label": "Side View", "url": "https://example.com/side.png"}
+        assert views[0] == {"key": "sideViews", "url": "https://example.com/side.png"}
 
     def test_extracts_rider_view(self):
         info = {"images": {"riderViews": [{"url": "https://example.com/rider.png"}]}}
         views = _extract_image_views(info)
         assert len(views) == 1
-        assert views[0] == {"key": "riderViews", "label": "Rider View", "url": "https://example.com/rider.png"}
+        assert views[0] == {"key": "riderViews", "url": "https://example.com/rider.png"}
 
     def test_extracts_both_views(self):
         info = {"images": {
@@ -375,7 +375,7 @@ class TestExtractImageViews:
         ]}}
         views = _extract_image_views(info)
         assert len(views) == 1
-        assert views[0] == {"key": "sideViews", "label": "Side View", "url": "https://example.com/side1.png"}
+        assert views[0] == {"key": "sideViews", "url": "https://example.com/side1.png"}
 
     def test_selects_entry_matching_color_code(self):
         """Selects the entry whose colorCode matches the bike's top-level colorCode."""
