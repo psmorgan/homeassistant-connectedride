@@ -107,6 +107,7 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="fuel_level",
         translation_key="fuel_level",
+        name="Fuel level",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_fuel_level_value,
@@ -114,6 +115,7 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="remaining_range",
         translation_key="remaining_range",
+        name="Remaining range",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
         state_class=SensorStateClass.MEASUREMENT,
@@ -122,12 +124,14 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="last_sync",
         translation_key="last_sync",
+        name="Last sync",
         device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=_last_sync_value,
     ),
     BMWBikeSensorEntityDescription(
         key="energy_level",
         translation_key="energy_level",
+        name="Energy level",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=False,
@@ -136,6 +140,7 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="electric_range",
         translation_key="electric_range",
+        name="Electric range",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
         state_class=SensorStateClass.MEASUREMENT,
@@ -146,6 +151,7 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="front_tire_pressure",
         translation_key="front_tire_pressure",
+        name="Front tire pressure",
         device_class=SensorDeviceClass.PRESSURE,
         native_unit_of_measurement=UnitOfPressure.BAR,
         state_class=SensorStateClass.MEASUREMENT,
@@ -155,6 +161,7 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="rear_tire_pressure",
         translation_key="rear_tire_pressure",
+        name="Rear tire pressure",
         device_class=SensorDeviceClass.PRESSURE,
         native_unit_of_measurement=UnitOfPressure.BAR,
         state_class=SensorStateClass.MEASUREMENT,
@@ -164,6 +171,7 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="mileage",
         translation_key="mileage",
+        name="Mileage",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -173,6 +181,7 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="trip_distance",
         translation_key="trip_distance",
+        name="Trip distance",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
         state_class=SensorStateClass.MEASUREMENT,
@@ -182,12 +191,14 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="next_service_date",
         translation_key="next_service_date",
+        name="Next service date",
         device_class=SensorDeviceClass.DATE,
         value_fn=_next_service_date_value,
     ),
     BMWBikeSensorEntityDescription(
         key="next_service_distance",
         translation_key="next_service_distance",
+        name="Next service distance",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
         suggested_display_precision=1,

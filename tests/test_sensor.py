@@ -348,6 +348,14 @@ class TestSensorDescriptions:
         assert desc.device_class == SensorDeviceClass.DISTANCE
         assert desc.state_class is None  # remaining distance decreases, not a measurement
 
+    def test_all_descriptions_have_explicit_name(self):
+        """Every description sets name (not UNDEFINED) for custom-component entity ID generation."""
+        for desc in SENSOR_DESCRIPTIONS:
+            assert desc.name is not None, (
+                f"{desc.key}: entity_description.name must be set explicitly "
+                "so HA generates descriptive entity IDs for custom components"
+            )
+
 
 # ---------------------------------------------------------------------------
 # BMWBikeSensor entity tests

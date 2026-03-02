@@ -21,6 +21,7 @@ TRACKER_DESCRIPTIONS: tuple[BMWBikeTrackerEntityDescription, ...] = (
     BMWBikeTrackerEntityDescription(
         key="gps_location",
         translation_key="gps_location",
+        name="GPS location",
     ),
 )
 
