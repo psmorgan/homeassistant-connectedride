@@ -210,6 +210,11 @@ class TestBMWBikeDeviceTracker:
         coordinator.data = {}
         assert entity.longitude is None
 
+    def test_tracker_instance_translation_key(self):
+        """Entity instance exposes translation_key from its description."""
+        entity = _make_tracker(BIKE_WITH_GPS)
+        assert entity._attr_translation_key == "gps_location"
+
 
 # ---------------------------------------------------------------------------
 # async_setup_entry tests

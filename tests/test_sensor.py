@@ -452,6 +452,23 @@ class TestBMWBikeSensor:
         coordinator.data = {}
         assert sensor.native_value is None
 
+    # translation_key instance tests
+
+    def test_sensor_instance_translation_key(self):
+        """Entity instance exposes translation_key from its description."""
+        sensor = self._make_sensor(BIKE_WITH_NAME, description_index=0)
+        assert sensor._attr_translation_key == "fuel_level"
+
+    def test_all_sensors_have_instance_translation_key(self):
+        """Every sensor description's translation_key is bridged to entity instance."""
+        vin = BIKE_WITH_NAME["vin"]
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        for desc in SENSOR_DESCRIPTIONS:
+            entity = BMWBikeSensor(coordinator, vin, desc)
+            assert entity._attr_translation_key == desc.translation_key, (
+                f"{desc.key}: _attr_translation_key not set"
+            )
+
 
 # ---------------------------------------------------------------------------
 # async_setup_entry tests
