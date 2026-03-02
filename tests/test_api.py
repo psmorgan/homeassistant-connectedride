@@ -357,15 +357,6 @@ class TestExtractImageViews:
         assert views[0]["key"] == "sideViews"
         assert views[1]["key"] == "riderViews"
 
-    def test_excludes_color_tiles(self):
-        info = {"images": {
-            "colorTiles": [{"url": "https://example.com/tile.png"}],
-            "sideViews": [{"url": "https://example.com/side.png"}],
-        }}
-        views = _extract_image_views(info)
-        assert len(views) == 1
-        assert views[0]["key"] == "sideViews"
-
     def test_returns_empty_when_no_images(self):
         assert _extract_image_views({}) == []
 
@@ -376,16 +367,91 @@ class TestExtractImageViews:
         info = {"images": {"sideViews": [{"colorCode": "P0H0L"}]}}
         assert _extract_image_views(info) == []
 
-    def test_multiple_entries_get_indexed_keys(self):
+    def test_multiple_entries_returns_one_per_type(self):
+        """Multiple entries for a view type produce only one result (first entry fallback)."""
         info = {"images": {"sideViews": [
-            {"url": "https://example.com/side1.png"},
-            {"url": "https://example.com/side2.png"},
+            {"url": "https://example.com/side1.png", "colorCode": "AAA"},
+            {"url": "https://example.com/side2.png", "colorCode": "BBB"},
         ]}}
         views = _extract_image_views(info)
-        assert len(views) == 2
-        assert views[0] == {"key": "sideViews_0", "label": "Side View 1", "url": "https://example.com/side1.png"}
-        assert views[1] == {"key": "sideViews_1", "label": "Side View 2", "url": "https://example.com/side2.png"}
+        assert len(views) == 1
+        assert views[0] == {"key": "sideViews", "label": "Side View", "url": "https://example.com/side1.png"}
+
+    def test_selects_entry_matching_color_code(self):
+        """Selects the entry whose colorCode matches the bike's top-level colorCode."""
+        info = {
+            "colorCode": "P0H0L",
+            "images": {"sideViews": [
+                {"url": "https://example.com/wrong.png", "colorCode": "OTHER"},
+                {"url": "https://example.com/correct.png", "colorCode": "P0H0L"},
+            ]},
+        }
+        views = _extract_image_views(info)
+        assert len(views) == 1
+        assert views[0]["url"] == "https://example.com/correct.png"
+
+    def test_falls_back_to_nocolor_when_no_match(self):
+        """Falls back to NOCOLOR entry when no exact colorCode match exists."""
+        info = {
+            "colorCode": "NONEXISTENT",
+            "images": {"riderViews": [
+                {"url": "https://example.com/other.png", "colorCode": "AAA"},
+                {"url": "https://example.com/nocolor.png", "colorCode": "NOCOLOR"},
+            ]},
+        }
+        views = _extract_image_views(info)
+        assert len(views) == 1
+        assert views[0]["url"] == "https://example.com/nocolor.png"
+
+    def test_falls_back_to_first_when_no_match_or_nocolor(self):
+        """Falls back to first entry when neither exact match nor NOCOLOR exists."""
+        info = {
+            "colorCode": "NONEXISTENT",
+            "images": {"sideViews": [
+                {"url": "https://example.com/first.png", "colorCode": "AAA"},
+                {"url": "https://example.com/second.png", "colorCode": "BBB"},
+            ]},
+        }
+        views = _extract_image_views(info)
+        assert len(views) == 1
+        assert views[0]["url"] == "https://example.com/first.png"
+
+    def test_color_code_none_falls_back(self):
+        """When bike has no top-level colorCode, skips exact match and uses NOCOLOR or first."""
+        info = {"images": {"sideViews": [
+            {"url": "https://example.com/first.png", "colorCode": "AAA"},
+            {"url": "https://example.com/nocolor.png", "colorCode": "NOCOLOR"},
+        ]}}
+        views = _extract_image_views(info)
+        assert len(views) == 1
+        assert views[0]["url"] == "https://example.com/nocolor.png"
+
+    def test_color_code_none_no_nocolor_uses_first(self):
+        """When bike has no colorCode and no NOCOLOR entry, uses first entry."""
+        info = {"images": {"sideViews": [
+            {"url": "https://example.com/first.png", "colorCode": "AAA"},
+            {"url": "https://example.com/second.png", "colorCode": "BBB"},
+        ]}}
+        views = _extract_image_views(info)
+        assert len(views) == 1
+        assert views[0]["url"] == "https://example.com/first.png"
 
     def test_handles_empty_side_views_list(self):
         info = {"images": {"sideViews": []}}
         assert _extract_image_views(info) == []
+
+    def test_includes_color_tile(self):
+        """colorTiles view type is included and produces a Color Tile entry."""
+        info = {
+            "colorCode": "P0H0L",
+            "images": {
+                "colorTiles": [
+                    {"url": "https://example.com/tile.png", "colorCode": "P0H0L"},
+                ]
+            },
+        }
+        views = _extract_image_views(info)
+        assert len(views) == 1
+        assert views[0]["key"] == "colorTiles"
+        assert views[0]["label"] == "Color Tile"
+        assert views[0]["url"] == "https://example.com/tile.png"
