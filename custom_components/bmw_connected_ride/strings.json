@@ -15,6 +15,10 @@
     },
     "device_tracker": {
       "gps_location": { "name": "GPS location" }
+    },
+    "image": {
+      "sideViews": { "name": "Side view" },
+      "riderViews": { "name": "Rider view" }
     }
   },
   "config": {

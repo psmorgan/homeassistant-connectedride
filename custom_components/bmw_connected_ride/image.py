@@ -41,7 +41,7 @@ class BMWBikeImage(CoordinatorEntity[BMWConnectedRideCoordinator], ImageEntity):
         ImageEntity.__init__(self, coordinator.hass)
         self._vin = vin
         self._attr_unique_id = f"{vin}_image_{view['key']}"
-        self._attr_name = view["label"]
+        self._attr_translation_key = view["key"]
         self._attr_image_url = view["url"]
         self._attr_image_last_updated = dt_util.utcnow()
         bike = coordinator.data[vin]
