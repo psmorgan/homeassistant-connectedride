@@ -12,10 +12,7 @@ STATICDATA_API_KEY = "9dcd9fb1-3118-468d-86fc-d6dfca50c492"
 
 _LOGGER = logging.getLogger(__name__)
 
-_VIEW_TYPES = (
-    ("sideViews", "Side View"),
-    ("riderViews", "Rider View"),
-)
+_VIEW_TYPES = ("sideViews", "riderViews")
 
 
 def _extract_image_views(vehicle_info: dict) -> list[dict]:
@@ -26,12 +23,12 @@ def _extract_image_views(vehicle_info: dict) -> list[dict]:
     2. Entry with colorCode == "NOCOLOR"
     3. First entry as last resort
 
-    Returns list of dicts with keys: key, label, url.
+    Returns list of dicts with keys: key, url.
     """
     views: list[dict] = []
     images = vehicle_info.get("images") or {}
     color_code = vehicle_info.get("colorCode")
-    for view_type, label in _VIEW_TYPES:
+    for view_type in _VIEW_TYPES:
         entries = images.get(view_type) or []
         if not entries:
             continue
@@ -44,7 +41,7 @@ def _extract_image_views(vehicle_info: dict) -> list[dict]:
             entry = entries[0]
         url = entry.get("url")
         if url:
-            views.append({"key": view_type, "label": label, "url": url})
+            views.append({"key": view_type, "url": url})
     return views
 
 
