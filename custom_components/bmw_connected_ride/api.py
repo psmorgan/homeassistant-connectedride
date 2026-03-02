@@ -15,7 +15,6 @@ _LOGGER = logging.getLogger(__name__)
 _VIEW_TYPES = (
     ("sideViews", "Side View"),
     ("riderViews", "Rider View"),
-    ("colorTiles", "Color Tile"),
 )
 
 

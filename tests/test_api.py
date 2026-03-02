@@ -440,18 +440,11 @@ class TestExtractImageViews:
         info = {"images": {"sideViews": []}}
         assert _extract_image_views(info) == []
 
-    def test_includes_color_tile(self):
-        """colorTiles view type is included and produces a Color Tile entry."""
-        info = {
-            "colorCode": "P0H0L",
-            "images": {
-                "colorTiles": [
-                    {"url": "https://example.com/tile.png", "colorCode": "P0H0L"},
-                ]
-            },
-        }
+    def test_excludes_color_tiles(self):
+        info = {"images": {
+            "colorTiles": [{"url": "https://example.com/tile.png"}],
+            "sideViews": [{"url": "https://example.com/side.png"}],
+        }}
         views = _extract_image_views(info)
         assert len(views) == 1
-        assert views[0]["key"] == "colorTiles"
-        assert views[0]["label"] == "Color Tile"
-        assert views[0]["url"] == "https://example.com/tile.png"
+        assert views[0]["key"] == "sideViews"

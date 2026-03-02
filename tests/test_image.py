@@ -118,14 +118,13 @@ class TestImagePlatformSetup:
 
     @pytest.mark.asyncio
     async def test_creates_entities_from_vehicle_info(self):
-        """Creates one entity per image view from vehicle info (side, rider, color tile)."""
+        """Creates one entity per image view from vehicle info (side + rider)."""
         vehicle_info = {
             TEST_VIN: {
                 "colorCode": "P0H0L",
                 "images": {
                     "sideViews": [{"url": "https://example.com/side.png", "colorCode": "P0H0L"}],
                     "riderViews": [{"url": "https://example.com/rider.png", "colorCode": "P0H0L"}],
-                    "colorTiles": [{"url": "https://example.com/tile.png", "colorCode": "P0H0L"}],
                 },
             }
         }
@@ -135,34 +134,10 @@ class TestImagePlatformSetup:
         added_entities = []
         async_add_entities = lambda entities: added_entities.extend(entities)
         await async_setup_entry(None, entry, async_add_entities)
-        assert len(added_entities) == 3
+        assert len(added_entities) == 2
         keys = {e.unique_id for e in added_entities}
         assert f"{TEST_VIN}_image_sideViews" in keys
         assert f"{TEST_VIN}_image_riderViews" in keys
-        assert f"{TEST_VIN}_image_colorTiles" in keys
-
-    @pytest.mark.asyncio
-    async def test_creates_color_tile_entity(self):
-        """Creates a Color Tile entity when vehicle_info includes colorTiles."""
-        vehicle_info = {
-            TEST_VIN: {
-                "colorCode": "P0H0L",
-                "images": {
-                    "colorTiles": [{"url": "https://example.com/tile.png", "colorCode": "P0H0L"}],
-                },
-            }
-        }
-        coordinator = _make_coordinator(vehicle_info=vehicle_info)
-        entry = MagicMock()
-        entry.runtime_data = coordinator
-        added_entities = []
-        async_add_entities = lambda entities: added_entities.extend(entities)
-        await async_setup_entry(None, entry, async_add_entities)
-        assert len(added_entities) == 1
-        entity = added_entities[0]
-        assert entity.unique_id == f"{TEST_VIN}_image_colorTiles"
-        assert entity.name == "Color Tile"
-        assert entity.content_type == "image/png"
 
     @pytest.mark.asyncio
     async def test_no_entities_when_vehicle_info_empty(self):
