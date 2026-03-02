@@ -221,6 +221,7 @@ class BMWBikeSensor(CoordinatorEntity[BMWConnectedRideCoordinator], SensorEntity
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = description
+        self._attr_translation_key = description.translation_key
         self._vin = vin
         self._attr_unique_id = f"{vin}_{description.key}"
         bike = coordinator.data[vin]
