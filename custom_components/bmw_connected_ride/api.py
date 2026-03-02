@@ -15,26 +15,37 @@ _LOGGER = logging.getLogger(__name__)
 _VIEW_TYPES = (
     ("sideViews", "Side View"),
     ("riderViews", "Rider View"),
+    ("colorTiles", "Color Tile"),
 )
 
 
 def _extract_image_views(vehicle_info: dict) -> list[dict]:
-    """Extract all image views from VehicleInfoResponse.
+    """Extract one image per view type from VehicleInfoResponse.
+
+    Selects a single entry per view type using three-tier colorCode matching:
+    1. Exact match on the bike's top-level colorCode
+    2. Entry with colorCode == "NOCOLOR"
+    3. First entry as last resort
 
     Returns list of dicts with keys: key, label, url.
-    Includes sideViews and riderViews (not colorTiles -- those are tiny color swatches).
     """
     views: list[dict] = []
     images = vehicle_info.get("images") or {}
+    color_code = vehicle_info.get("colorCode")
     for view_type, label in _VIEW_TYPES:
         entries = images.get(view_type) or []
-        for i, entry in enumerate(entries):
-            url = entry.get("url")
-            if not url:
-                continue
-            suffix = f"_{i}" if len(entries) > 1 else ""
-            name = f"{label} {i + 1}" if len(entries) > 1 else label
-            views.append({"key": f"{view_type}{suffix}", "label": name, "url": url})
+        if not entries:
+            continue
+        entry = None
+        if color_code is not None:
+            entry = next((e for e in entries if e.get("colorCode") == color_code), None)
+        if entry is None:
+            entry = next((e for e in entries if e.get("colorCode") == "NOCOLOR"), None)
+        if entry is None:
+            entry = entries[0]
+        url = entry.get("url")
+        if url:
+            views.append({"key": view_type, "label": label, "url": url})
     return views
 
 
