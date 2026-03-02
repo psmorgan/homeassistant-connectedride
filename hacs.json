@@ -1,5 +1,7 @@
 {
   "name": "BMW Connected Ride",
+  "description": "BMW Connected Ride integration for Home Assistant",
   "homeassistant": "2025.4.0",
-  "hacs": "2.0.0"
+  "hacs": "2.0.0",
+  "render_readme": true
 }
