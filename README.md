@@ -21,7 +21,7 @@ A Home Assistant custom integration for BMW motorcycles using the BMW Connected 
 - Trip distance
 - Next service date and distance to service
 - GPS device tracker
-- Motorcycle images (side views, rider views, color tiles)
+- Motorcycle images (side views, rider views)
 
 ## Installation
 
