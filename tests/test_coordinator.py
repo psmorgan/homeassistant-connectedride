@@ -266,3 +266,87 @@ class TestAsyncUpdateData:
         await coordinator._async_update_data()
 
         hass.config_entries.async_update_entry.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Image cache tests
+# ---------------------------------------------------------------------------
+
+SAMPLE_VEHICLE_INFO = {
+    "WB10X0X00X0000001": {
+        "colorCode": "P0H0L",
+        "images": {
+            "sideViews": [{"url": "https://s3.example.com/side.png", "colorCode": "P0H0L"}],
+        },
+    }
+}
+
+
+def _make_api_client_with_images(bikes=None, vehicle_info=None, image_result=(b"img", "image/png")):
+    """Create a mock API client with vehicle info and image download support."""
+    _vi = vehicle_info or SAMPLE_VEHICLE_INFO
+    api = MagicMock()
+    api.async_get_bikes = AsyncMock(return_value=bikes if bikes is not None else SAMPLE_BIKES)
+    api.async_get_vehicle_info = AsyncMock(
+        side_effect=lambda vin, **kwargs: _vi.get(vin, {})
+    )
+    api.async_download_image = AsyncMock(return_value=image_result)
+    return api
+
+
+class TestImageCache:
+    """Tests for coordinator.image_cache."""
+
+    def test_image_cache_initialized_empty(self):
+        """coordinator.image_cache is {} at init."""
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_mock_api_client()
+
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+
+        assert coordinator.image_cache == {}
+
+    @pytest.mark.asyncio
+    async def test_image_cache_populated_after_fetch(self):
+        """image_cache has entries keyed by VIN -> view_key -> (bytes, content_type)."""
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_api_client_with_images(
+            bikes=[SAMPLE_BIKES[0]],
+            vehicle_info=SAMPLE_VEHICLE_INFO,
+            image_result=(b"img-bytes", "image/png"),
+        )
+
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+        coordinator.data = {"WB10X0X00X0000001": SAMPLE_BIKES[0]}
+        coordinator.vehicle_info = SAMPLE_VEHICLE_INFO
+        await coordinator.async_fetch_vehicle_info()
+
+        assert "WB10X0X00X0000001" in coordinator.image_cache
+        assert "sideViews" in coordinator.image_cache["WB10X0X00X0000001"]
+        cached = coordinator.image_cache["WB10X0X00X0000001"]["sideViews"]
+        assert cached[0] == b"img-bytes"
+        assert cached[1] == "image/png"
+
+    @pytest.mark.asyncio
+    async def test_image_cache_empty_on_download_failure(self):
+        """image_cache has empty dict for VIN when all downloads fail."""
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_api_client_with_images(
+            bikes=[SAMPLE_BIKES[0]],
+            vehicle_info=SAMPLE_VEHICLE_INFO,
+            image_result=None,  # download failure
+        )
+
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+        coordinator.data = {"WB10X0X00X0000001": SAMPLE_BIKES[0]}
+        coordinator.vehicle_info = SAMPLE_VEHICLE_INFO
+        await coordinator.async_fetch_vehicle_info()
+
+        assert "WB10X0X00X0000001" in coordinator.image_cache
+        assert coordinator.image_cache["WB10X0X00X0000001"] == {}

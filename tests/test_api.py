@@ -448,3 +448,74 @@ class TestExtractImageViews:
         views = _extract_image_views(info)
         assert len(views) == 1
         assert views[0]["key"] == "sideViews"
+
+
+# ---------------------------------------------------------------------------
+# TestAsyncDownloadImage
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncDownloadImage:
+    """Tests for BMWApiClient.async_download_image."""
+
+    @pytest.mark.asyncio
+    async def test_async_download_image_success(self):
+        """Returns (bytes, content_type) tuple on successful GET."""
+        resp = _make_mock_response(200)
+        resp.read = AsyncMock(return_value=b"fake-png-bytes")
+        resp.headers = {"Content-Type": "image/png"}
+        session = _make_mock_session(resp)
+        client = BMWApiClient(
+            session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER
+        )
+
+        result = await client.async_download_image("https://example.com/image.png")
+
+        assert result is not None
+        assert result[0] == b"fake-png-bytes"
+        assert result[1] == "image/png"
+
+    @pytest.mark.asyncio
+    async def test_async_download_image_uses_content_type_header(self):
+        """Content-Type comes from response header, not hardcoded."""
+        resp = _make_mock_response(200)
+        resp.read = AsyncMock(return_value=b"webp-bytes")
+        resp.headers = {"Content-Type": "image/webp"}
+        session = _make_mock_session(resp)
+        client = BMWApiClient(
+            session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER
+        )
+
+        result = await client.async_download_image("https://example.com/image.webp")
+
+        assert result is not None
+        assert result[1] == "image/webp"
+
+    @pytest.mark.asyncio
+    async def test_async_download_image_returns_none_on_failure(self):
+        """Returns None (not raises) on HTTP error."""
+        resp = _make_mock_response(403)
+        session = _make_mock_session(resp)
+        client = BMWApiClient(
+            session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER
+        )
+
+        result = await client.async_download_image("https://example.com/image.png")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_async_download_image_defaults_content_type(self):
+        """Defaults to 'image/jpeg' when Content-Type header is missing."""
+        resp = _make_mock_response(200)
+        resp.read = AsyncMock(return_value=b"jpeg-bytes")
+        resp.headers = {}
+        session = _make_mock_session(resp)
+        client = BMWApiClient(
+            session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER
+        )
+
+        result = await client.async_download_image("https://example.com/image.jpg")
+
+        assert result is not None
+        assert result[1] == "image/jpeg"

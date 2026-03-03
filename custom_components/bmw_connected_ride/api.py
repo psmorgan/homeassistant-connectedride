@@ -90,6 +90,22 @@ class BMWApiClient:
             data = await resp.json()
         return data.get("bikes", [])
 
+    async def async_download_image(self, url: str) -> tuple[bytes, str] | None:
+        """Download image bytes from a URL. Returns (bytes, content_type) or None.
+
+        No auth header needed -- S3 pre-signed URLs include auth in query params.
+        """
+        try:
+            async with self._session.get(
+                url, timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                resp.raise_for_status()
+                content_type = resp.headers.get("Content-Type", "image/jpeg")
+                return await resp.read(), content_type
+        except Exception:
+            _LOGGER.warning("Could not download image from %s", url)
+            return None
+
     async def async_get_vehicle_info(
         self,
         vin: str,

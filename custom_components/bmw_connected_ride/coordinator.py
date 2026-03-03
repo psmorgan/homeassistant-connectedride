@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import BMWApiClient
+from .api import BMWApiClient, _extract_image_views
 from .auth import BMWAuthClient, BMWAuthError
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict]]):
         self._auth_client = auth_client
         self._api_client = api_client
         self.vehicle_info: dict[str, dict] = {}
+        self.image_cache: dict[str, dict[str, tuple[bytes, str]]] = {}
 
     async def _async_update_data(self) -> dict[str, dict]:
         """Fetch all bikes from Cloud Sync. Returns dict keyed by VIN."""
@@ -96,3 +97,19 @@ class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict]]):
             *[_fetch_one(vin, bike) for vin, bike in self.data.items()]
         )
         self.vehicle_info = dict(results)
+
+        # Download image bytes for all bikes in parallel
+        async def _download_views(vin: str) -> tuple[str, dict[str, tuple[bytes, str]]]:
+            info = self.vehicle_info.get(vin, {})
+            views = _extract_image_views(info)
+            cache: dict[str, tuple[bytes, str]] = {}
+            for view in views:
+                result = await self._api_client.async_download_image(view["url"])
+                if result is not None:
+                    cache[view["key"]] = result
+            return vin, cache
+
+        image_results = await asyncio.gather(
+            *[_download_views(vin) for vin in self.vehicle_info]
+        )
+        self.image_cache = dict(image_results)
