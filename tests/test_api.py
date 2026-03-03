@@ -17,7 +17,7 @@ from custom_components.bmw_connected_ride.api import (
     BIKES_PATH,
     STATICDATA_PATH,
     STATICDATA_API_KEY,
-    _extract_image_views,
+    extract_image_views,
 )
 from custom_components.bmw_connected_ride.auth import BMWAuthError
 from custom_components.bmw_connected_ride.const import REGION_CONFIGS
@@ -333,17 +333,17 @@ class TestAsyncGetVehicleInfo:
 
 
 class TestExtractImageViews:
-    """Tests for _extract_image_views helper."""
+    """Tests for extract_image_views helper."""
 
     def test_extracts_side_view(self):
         info = {"images": {"sideViews": [{"url": "https://example.com/side.png", "colorCode": "P0H0L"}]}}
-        views = _extract_image_views(info)
+        views = extract_image_views(info)
         assert len(views) == 1
         assert views[0] == {"key": "sideViews", "url": "https://example.com/side.png"}
 
     def test_extracts_rider_view(self):
         info = {"images": {"riderViews": [{"url": "https://example.com/rider.png"}]}}
-        views = _extract_image_views(info)
+        views = extract_image_views(info)
         assert len(views) == 1
         assert views[0] == {"key": "riderViews", "url": "https://example.com/rider.png"}
 
@@ -352,20 +352,20 @@ class TestExtractImageViews:
             "sideViews": [{"url": "https://example.com/side.png"}],
             "riderViews": [{"url": "https://example.com/rider.png"}],
         }}
-        views = _extract_image_views(info)
+        views = extract_image_views(info)
         assert len(views) == 2
         assert views[0]["key"] == "sideViews"
         assert views[1]["key"] == "riderViews"
 
     def test_returns_empty_when_no_images(self):
-        assert _extract_image_views({}) == []
+        assert extract_image_views({}) == []
 
     def test_returns_empty_when_images_is_none(self):
-        assert _extract_image_views({"images": None}) == []
+        assert extract_image_views({"images": None}) == []
 
     def test_skips_entries_without_url(self):
         info = {"images": {"sideViews": [{"colorCode": "P0H0L"}]}}
-        assert _extract_image_views(info) == []
+        assert extract_image_views(info) == []
 
     def test_multiple_entries_returns_one_per_type(self):
         """Multiple entries for a view type produce only one result (first entry fallback)."""
@@ -373,7 +373,7 @@ class TestExtractImageViews:
             {"url": "https://example.com/side1.png", "colorCode": "AAA"},
             {"url": "https://example.com/side2.png", "colorCode": "BBB"},
         ]}}
-        views = _extract_image_views(info)
+        views = extract_image_views(info)
         assert len(views) == 1
         assert views[0] == {"key": "sideViews", "url": "https://example.com/side1.png"}
 
@@ -386,7 +386,7 @@ class TestExtractImageViews:
                 {"url": "https://example.com/correct.png", "colorCode": "P0H0L"},
             ]},
         }
-        views = _extract_image_views(info)
+        views = extract_image_views(info)
         assert len(views) == 1
         assert views[0]["url"] == "https://example.com/correct.png"
 
@@ -399,7 +399,7 @@ class TestExtractImageViews:
                 {"url": "https://example.com/nocolor.png", "colorCode": "NOCOLOR"},
             ]},
         }
-        views = _extract_image_views(info)
+        views = extract_image_views(info)
         assert len(views) == 1
         assert views[0]["url"] == "https://example.com/nocolor.png"
 
@@ -412,7 +412,7 @@ class TestExtractImageViews:
                 {"url": "https://example.com/second.png", "colorCode": "BBB"},
             ]},
         }
-        views = _extract_image_views(info)
+        views = extract_image_views(info)
         assert len(views) == 1
         assert views[0]["url"] == "https://example.com/first.png"
 
@@ -422,7 +422,7 @@ class TestExtractImageViews:
             {"url": "https://example.com/first.png", "colorCode": "AAA"},
             {"url": "https://example.com/nocolor.png", "colorCode": "NOCOLOR"},
         ]}}
-        views = _extract_image_views(info)
+        views = extract_image_views(info)
         assert len(views) == 1
         assert views[0]["url"] == "https://example.com/nocolor.png"
 
@@ -432,20 +432,20 @@ class TestExtractImageViews:
             {"url": "https://example.com/first.png", "colorCode": "AAA"},
             {"url": "https://example.com/second.png", "colorCode": "BBB"},
         ]}}
-        views = _extract_image_views(info)
+        views = extract_image_views(info)
         assert len(views) == 1
         assert views[0]["url"] == "https://example.com/first.png"
 
     def test_handles_empty_side_views_list(self):
         info = {"images": {"sideViews": []}}
-        assert _extract_image_views(info) == []
+        assert extract_image_views(info) == []
 
     def test_excludes_color_tiles(self):
         info = {"images": {
             "colorTiles": [{"url": "https://example.com/tile.png"}],
             "sideViews": [{"url": "https://example.com/side.png"}],
         }}
-        views = _extract_image_views(info)
+        views = extract_image_views(info)
         assert len(views) == 1
         assert views[0]["key"] == "sideViews"
 

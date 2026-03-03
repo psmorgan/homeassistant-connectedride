@@ -2,23 +2,32 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.image import Image, ImageEntity
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .api import _extract_image_views
+from . import BMWConnectedRideConfigEntry
+from .api import extract_image_views
 from .const import DOMAIN
 from .coordinator import BMWConnectedRideCoordinator
 
 
-async def async_setup_entry(hass, entry, async_add_entities) -> None:
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: BMWConnectedRideConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     """Set up BMW Connected Ride image entities from a config entry."""
     coordinator: BMWConnectedRideCoordinator = entry.runtime_data
     entities: list[BMWBikeImage] = []
     for vin in coordinator.data:
         vehicle_info = coordinator.vehicle_info.get(vin, {})
-        views = _extract_image_views(vehicle_info)
+        views = extract_image_views(vehicle_info)
         for view in views:
             entities.append(BMWBikeImage(coordinator, vin, view))
     async_add_entities(entities)
@@ -33,7 +42,7 @@ class BMWBikeImage(CoordinatorEntity[BMWConnectedRideCoordinator], ImageEntity):
         self,
         coordinator: BMWConnectedRideCoordinator,
         vin: str,
-        view: dict,
+        view: dict[str, Any],
     ) -> None:
         """Initialize the image entity."""
         super().__init__(coordinator)
@@ -42,7 +51,7 @@ class BMWBikeImage(CoordinatorEntity[BMWConnectedRideCoordinator], ImageEntity):
         self._attr_unique_id = f"{vin}_image_{view['key']}"
         self._attr_translation_key = view["key"]
         self._attr_image_last_updated = dt_util.utcnow()
-        bike = coordinator.data[vin]
+        bike: dict[str, Any] = coordinator.data[vin]
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, vin)},
             name=bike.get("name") or vin,

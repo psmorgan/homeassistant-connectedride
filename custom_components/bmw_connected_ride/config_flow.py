@@ -10,7 +10,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .auth import BMWAuthClient, BMWAuthError
+from .auth import BMWAuthClient
 from .const import CONF_REGION, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class BMWConnectedRideConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self._region: str | None = None
         self._auth_client: BMWAuthClient | None = None
-        self._login_task: asyncio.Task | None = None
+        self._login_task: asyncio.Task[Any] | None = None
         self._device_code: str | None = None
         self._user_code: str | None = None
         self._verification_uri: str | None = None
@@ -66,6 +66,7 @@ class BMWConnectedRideConfigFlow(ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("Config flow step: device_auth")
 
         if self._auth_client is None:
+            assert self._region is not None, "region must be set before device auth step"
             session = async_get_clientsession(self.hass)
             self._auth_client = BMWAuthClient(
                 region=self._region,
@@ -84,6 +85,10 @@ class BMWConnectedRideConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._user_code,
                 self._verification_uri,
             )
+
+        assert self._device_code is not None, "device_code must be set before polling"
+        assert self._user_code is not None, "user_code must be set before showing form"
+        assert self._verification_uri is not None, "verification_uri must be set before showing form"
 
         if self._login_task is None:
             self._login_task = self.hass.async_create_task(
@@ -140,6 +145,8 @@ class BMWConnectedRideConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Create the config entry after successful authentication."""
         _LOGGER.debug("Config flow step: finish")
+
+        assert self._auth_client is not None, "auth_client must be set before finish step"
 
         client_id_header = str(uuid.uuid4())
 

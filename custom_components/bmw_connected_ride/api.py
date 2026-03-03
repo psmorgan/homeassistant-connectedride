@@ -1,6 +1,7 @@
 """BMW Connected Ride Cloud Sync API client."""
 
 import logging
+from typing import Any
 
 import aiohttp
 
@@ -15,7 +16,7 @@ _LOGGER = logging.getLogger(__name__)
 _VIEW_TYPES = ("sideViews", "riderViews")
 
 
-def _extract_image_views(vehicle_info: dict) -> list[dict]:
+def extract_image_views(vehicle_info: dict[str, Any]) -> list[dict[str, Any]]:
     """Extract one image per view type from VehicleInfoResponse.
 
     Selects a single entry per view type using three-tier colorCode matching:
@@ -25,14 +26,14 @@ def _extract_image_views(vehicle_info: dict) -> list[dict]:
 
     Returns list of dicts with keys: key, url.
     """
-    views: list[dict] = []
-    images = vehicle_info.get("images") or {}
-    color_code = vehicle_info.get("colorCode")
+    views: list[dict[str, Any]] = []
+    images: dict[str, Any] = vehicle_info.get("images") or {}
+    color_code: str | None = vehicle_info.get("colorCode")
     for view_type in _VIEW_TYPES:
-        entries = images.get(view_type) or []
+        entries: list[dict[str, Any]] = images.get(view_type) or []
         if not entries:
             continue
-        entry = None
+        entry: dict[str, Any] | None = None
         if color_code is not None:
             entry = next((e for e in entries if e.get("colorCode") == color_code), None)
         if entry is None:
@@ -55,10 +56,10 @@ class BMWApiClient:
         client_id_header: str,
     ) -> None:
         self._session = session
-        self._base_url = REGION_CONFIGS[region]["api_base_url"]
+        self._base_url: str = REGION_CONFIGS[region]["api_base_url"]
         self._client_id_header = client_id_header
 
-    async def async_get_bikes(self, access_token: str) -> list[dict]:
+    async def async_get_bikes(self, access_token: str) -> list[dict[str, Any]]:
         """GET /cnrd/cloudsync/v2/bikes?limit=200 -- returns all linked bikes.
 
         Args:
@@ -87,8 +88,9 @@ class BMWApiClient:
                     "Unauthorized (HTTP 401) -- token invalid or expired"
                 )
             resp.raise_for_status()
-            data = await resp.json()
-        return data.get("bikes", [])
+            data: dict[str, Any] = await resp.json()
+        bikes: list[dict[str, Any]] = data.get("bikes", [])
+        return bikes
 
     async def async_download_image(self, url: str) -> tuple[bytes, str] | None:
         """Download image bytes from a URL. Returns (bytes, content_type) or None.
@@ -111,7 +113,7 @@ class BMWApiClient:
         vin: str,
         type_key: str | None = None,
         abs_type: str | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """POST /cnrd/bike/v2/staticdata -- returns static vehicle info including images.
 
         Uses x-cd-apigw-key header auth (not Bearer token -- Bearer returns 401).
@@ -134,7 +136,7 @@ class BMWApiClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-        body: dict = {"vin": vin}
+        body: dict[str, Any] = {"vin": vin}
         if type_key is not None:
             body["typeKey"] = type_key
         if abs_type is not None:
@@ -155,7 +157,7 @@ class BMWApiClient:
                 )
                 return {}
             resp.raise_for_status()
-            data = await resp.json()
+            data: dict[str, Any] | list[dict[str, Any]] = await resp.json()
         if isinstance(data, list) and data:
             return data[0]
         return {}

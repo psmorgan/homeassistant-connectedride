@@ -3,13 +3,14 @@
 import asyncio
 from datetime import timedelta
 import logging
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import BMWApiClient, _extract_image_views
+from .api import BMWApiClient, extract_image_views
 from .auth import BMWAuthClient, BMWAuthError
 
 _LOGGER = logging.getLogger(__name__)
@@ -17,13 +18,13 @@ _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=30)
 
 
-class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict]]):
+class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     """Coordinator for BMW Connected Ride -- polls Cloud Sync bikes every 30 min."""
 
     def __init__(
         self,
         hass: HomeAssistant,
-        entry: ConfigEntry,
+        entry: ConfigEntry,  # type: ignore[type-arg]  # ConfigEntry is generic but unparameterized here to avoid circular import
         auth_client: BMWAuthClient,
         api_client: BMWApiClient,
     ) -> None:
@@ -36,10 +37,10 @@ class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict]]):
         self._entry = entry
         self._auth_client = auth_client
         self._api_client = api_client
-        self.vehicle_info: dict[str, dict] = {}
+        self.vehicle_info: dict[str, dict[str, Any]] = {}
         self.image_cache: dict[str, dict[str, tuple[bytes, str]]] = {}
 
-    async def _async_update_data(self) -> dict[str, dict]:
+    async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         """Fetch all bikes from Cloud Sync. Returns dict keyed by VIN."""
         try:
             await self._auth_client.async_ensure_token_valid()
@@ -58,10 +59,11 @@ class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict]]):
                 },
             )
 
+        access_token = self._auth_client.access_token
+        assert access_token is not None, "access_token must be set after ensure_token_valid"
+
         try:
-            bikes = await self._api_client.async_get_bikes(
-                self._auth_client.access_token
-            )
+            bikes = await self._api_client.async_get_bikes(access_token)
         except BMWAuthError as ex:
             raise ConfigEntryAuthFailed(f"BMW auth failed: {ex}") from ex
         except Exception as ex:
@@ -81,7 +83,7 @@ class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict]]):
         Uses asyncio.gather for parallel fetches across bikes.
         """
 
-        async def _fetch_one(vin: str, bike: dict) -> tuple[str, dict]:
+        async def _fetch_one(vin: str, bike: dict[str, Any]) -> tuple[str, dict[str, Any]]:
             try:
                 info = await self._api_client.async_get_vehicle_info(
                     vin=vin,
@@ -101,7 +103,7 @@ class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict]]):
         # Download image bytes for all bikes in parallel
         async def _download_views(vin: str) -> tuple[str, dict[str, tuple[bytes, str]]]:
             info = self.vehicle_info.get(vin, {})
-            views = _extract_image_views(info)
+            views = extract_image_views(info)
             cache: dict[str, tuple[bytes, str]] = {}
             for view in views:
                 result = await self._api_client.async_download_image(view["url"])
