@@ -10,6 +10,8 @@
 
 A Home Assistant custom integration for BMW motorcycles using the BMW Connected Ride API. Exposes motorcycle telemetry as sensors, a GPS device tracker, and motorcycle images.
 
+![BMW Connected Ride screenshot](images/screenshot.png)
+
 ## Features
 
 - Fuel level and remaining range
