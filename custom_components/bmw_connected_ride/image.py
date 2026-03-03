@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from homeassistant.components.image import ImageEntity
+from homeassistant.components.image import Image, ImageEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
@@ -28,7 +28,6 @@ class BMWBikeImage(CoordinatorEntity[BMWConnectedRideCoordinator], ImageEntity):
     """An image entity for one view of a BMW motorcycle."""
 
     _attr_has_entity_name = True
-    _attr_content_type = "image/png"
 
     def __init__(
         self,
@@ -42,7 +41,6 @@ class BMWBikeImage(CoordinatorEntity[BMWConnectedRideCoordinator], ImageEntity):
         self._vin = vin
         self._attr_unique_id = f"{vin}_image_{view['key']}"
         self._attr_translation_key = view["key"]
-        self._attr_image_url = view["url"]
         self._attr_image_last_updated = dt_util.utcnow()
         bike = coordinator.data[vin]
         self._attr_device_info = DeviceInfo(
@@ -50,3 +48,11 @@ class BMWBikeImage(CoordinatorEntity[BMWConnectedRideCoordinator], ImageEntity):
             name=bike.get("name") or vin,
             manufacturer="BMW Motorrad",
         )
+
+        # Populate HA's native cache from coordinator image_cache
+        cached = coordinator.image_cache.get(vin, {}).get(view["key"])
+        if cached:
+            image_bytes, content_type = cached
+            self._cached_image = Image(content_type=content_type, content=image_bytes)
+            self._attr_content_type = content_type
+        # If not cached, _cached_image stays None -- async_image() returns None, HA shows placeholder

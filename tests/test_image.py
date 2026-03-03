@@ -20,11 +20,12 @@ TEST_VIN = "WB10A0100P1234567"
 TEST_BIKE = {"name": "My R1250GS", "vin": TEST_VIN}
 
 
-def _make_coordinator(bikes=None, vehicle_info=None):
+def _make_coordinator(bikes=None, vehicle_info=None, image_cache=None):
     """Create a mock coordinator with bike data and vehicle info."""
     coordinator = MagicMock()
     coordinator.data = bikes or {TEST_VIN: TEST_BIKE}
     coordinator.vehicle_info = vehicle_info or {}
+    coordinator.image_cache = image_cache if image_cache is not None else {}
     coordinator.hass = MagicMock()
     return coordinator
 
@@ -40,15 +41,15 @@ class TestBMWBikeImage:
     """Tests for BMWBikeImage entity."""
 
     def test_entity_attributes_from_side_view(self):
-        """Entity has correct unique_id, translation_key, and image_url from side view."""
+        """Entity has correct unique_id and translation_key from side view."""
         coordinator = _make_coordinator()
         view = {"key": "sideViews", "url": "https://example.com/side.png"}
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert entity.unique_id == f"{TEST_VIN}_image_sideViews"
         assert entity.translation_key == "sideViews"
         assert not hasattr(entity, '_attr_name') or entity._attr_name is None
-        assert entity.image_url == "https://example.com/side.png"
-        assert entity.content_type == "image/png"
+        # No URL set -- images served via _cached_image
+        assert not isinstance(getattr(entity, "_attr_image_url", None), str)
 
     def test_entity_attributes_from_rider_view(self):
         """Entity has correct unique_id and translation_key from rider view."""
@@ -57,7 +58,8 @@ class TestBMWBikeImage:
         entity = BMWBikeImage(coordinator, TEST_VIN, view)
         assert entity.unique_id == f"{TEST_VIN}_image_riderViews"
         assert entity.translation_key == "riderViews"
-        assert entity.image_url == "https://example.com/rider.png"
+        # No URL set -- images served via _cached_image
+        assert not isinstance(getattr(entity, "_attr_image_url", None), str)
 
     def test_entity_linked_to_device(self):
         """Entity is linked to the correct HA device via DeviceInfo."""
@@ -211,3 +213,58 @@ class TestImagePlatformSetup:
         await async_setup_entry(None, entry, async_add_entities)
         assert len(added_entities) == 1
         assert added_entities[0]._vin == vin2
+
+
+# ---------------------------------------------------------------------------
+# TestImageCaching
+# ---------------------------------------------------------------------------
+
+
+class TestImageCaching:
+    """Tests for BMWBikeImage serving bytes from coordinator.image_cache."""
+
+    def test_cached_bytes_served(self):
+        """entity._cached_image.content equals bytes from coordinator.image_cache."""
+        image_cache = {TEST_VIN: {"sideViews": (b"png-data", "image/png")}}
+        coordinator = _make_coordinator(image_cache=image_cache)
+        view = {"key": "sideViews", "url": "https://s3.example.com/side.png"}
+        entity = BMWBikeImage(coordinator, TEST_VIN, view)
+        assert entity._cached_image is not None
+        assert entity._cached_image.content == b"png-data"
+        assert entity._cached_image.content_type == "image/png"
+
+    def test_content_type_from_cache(self):
+        """entity._attr_content_type matches content_type from cache, not hardcoded."""
+        image_cache = {TEST_VIN: {"sideViews": (b"webp-data", "image/webp")}}
+        coordinator = _make_coordinator(image_cache=image_cache)
+        view = {"key": "sideViews", "url": "https://s3.example.com/side.webp"}
+        entity = BMWBikeImage(coordinator, TEST_VIN, view)
+        assert entity._attr_content_type == "image/webp"
+
+    def test_no_image_url_set(self):
+        """Entity does NOT have _attr_image_url set to a URL string."""
+        image_cache = {TEST_VIN: {"sideViews": (b"png-data", "image/png")}}
+        coordinator = _make_coordinator(image_cache=image_cache)
+        view = {"key": "sideViews", "url": "https://s3.example.com/side.png"}
+        entity = BMWBikeImage(coordinator, TEST_VIN, view)
+        # _attr_image_url must not be a URL string
+        attr = getattr(entity, "_attr_image_url", None)
+        assert not isinstance(attr, str)
+
+    def test_empty_cache_returns_none(self):
+        """When coordinator.image_cache has no entry for the view, _cached_image is None."""
+        coordinator = _make_coordinator(image_cache={})
+        view = {"key": "sideViews", "url": "https://s3.example.com/side.png"}
+        entity = BMWBikeImage(coordinator, TEST_VIN, view)
+        assert entity._cached_image is None
+
+    def test_entity_attributes_still_correct(self):
+        """With cache populated, unique_id, translation_key, device_info still correct."""
+        image_cache = {TEST_VIN: {"sideViews": (b"png-data", "image/png")}}
+        coordinator = _make_coordinator(image_cache=image_cache)
+        view = {"key": "sideViews", "url": "https://s3.example.com/side.png"}
+        entity = BMWBikeImage(coordinator, TEST_VIN, view)
+        assert entity.unique_id == f"{TEST_VIN}_image_sideViews"
+        assert entity.translation_key == "sideViews"
+        assert entity.device_info["identifiers"] == {(DOMAIN, TEST_VIN)}
+        assert entity.device_info["manufacturer"] == "BMW Motorrad"
