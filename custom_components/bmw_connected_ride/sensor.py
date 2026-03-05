@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.components.sensor.const import SensorDeviceClass, SensorStateClass
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfPressure
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfPressure, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -127,6 +127,37 @@ def _next_service_distance_value(bike: dict[str, Any]) -> float | None:
     return round(raw / 1000, 1)  # type: ignore[operator]  # API returns numeric; dict.get type is unknown
 
 
+def _last_activated_value(bike: dict[str, Any]) -> datetime | None:
+    """Convert lastActivatedTime epoch seconds to UTC datetime."""
+    ts = bike.get("lastActivatedTime")
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(ts, tz=timezone.utc)  # type: ignore[arg-type]  # API returns numeric; dict.get type is unknown
+
+
+def _total_connected_distance_value(bike: dict[str, Any]) -> float | None:
+    """Convert totalConnectedDistance from meters to kilometres."""
+    raw = bike.get("totalConnectedDistance")
+    if raw is None:
+        return None
+    return round(raw / 1000, 1)  # type: ignore[operator]  # API returns numeric; dict.get type is unknown
+
+
+def _total_connected_duration_value(bike: dict[str, Any]) -> float | None:
+    """Return totalConnectedDuration in seconds (no conversion needed)."""
+    return bike.get("totalConnectedDuration")  # type: ignore[return-value]  # API returns float or None; dict.get type is unknown
+
+
+def _charging_mode_value(bike: dict[str, Any]) -> str | None:
+    """Return chargingMode as plain text string."""
+    return bike.get("chargingMode")  # type: ignore[return-value]  # API returns str or None; dict.get type is unknown
+
+
+def _charging_time_estimation_value(bike: dict[str, Any]) -> int | None:
+    """Return chargingTimeEstimationElectric (unit assumed seconds)."""
+    return bike.get("chargingTimeEstimationElectric")  # type: ignore[return-value]  # API returns int or None; dict.get type is unknown
+
+
 SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
     BMWBikeSensorEntityDescription(
         key="fuel_level",
@@ -228,6 +259,48 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
         suggested_display_precision=1,
         value_fn=_next_service_distance_value,
     ),
+    BMWBikeSensorEntityDescription(
+        key="last_activated",
+        translation_key="last_activated",
+        name="Last activated",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=_last_activated_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="total_connected_distance",
+        translation_key="total_connected_distance",
+        name="Total connected distance",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=1,
+        value_fn=_total_connected_distance_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="total_connected_duration",
+        translation_key="total_connected_duration",
+        name="Total connected duration",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=_total_connected_duration_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="charging_mode",
+        translation_key="charging_mode",
+        name="Charging mode",
+        entity_registry_enabled_default=False,
+        value_fn=_charging_mode_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="charging_time_estimation",
+        translation_key="charging_time_estimation",
+        name="Charging time estimation",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        entity_registry_enabled_default=False,
+        value_fn=_charging_time_estimation_value,
+    ),
 )
 
 
@@ -277,3 +350,16 @@ class BMWBikeSensor(CoordinatorEntity[BMWConnectedRideCoordinator], SensorEntity
         if bike is None:
             return None
         return self.entity_description.value_fn(bike)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:  # type: ignore[override]  # HA base uses cached_property; runtime behavior is correct
+        """Return extra state attributes -- absType on mileage sensor."""
+        if self.entity_description.key != "mileage":
+            return None
+        bike = self.coordinator.data.get(self._vin)
+        if bike is None:
+            return None
+        abs_type = bike.get("absType")
+        if abs_type is None:
+            return None
+        return {"abs_type": abs_type}

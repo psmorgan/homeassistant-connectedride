@@ -30,6 +30,11 @@ from custom_components.bmw_connected_ride.sensor import (
     _trip_distance_value,
     _next_service_date_value,
     _next_service_distance_value,
+    _last_activated_value,
+    _total_connected_distance_value,
+    _total_connected_duration_value,
+    _charging_mode_value,
+    _charging_time_estimation_value,
     async_setup_entry,
 )
 
@@ -52,6 +57,12 @@ BIKE_WITH_NAME = {
     "trip1": 345600.0,
     "nextServiceDueDate": 1751328000,
     "nextServiceRemainingDistance": 8500000.0,
+    "lastActivatedTime": 1735689600,
+    "totalConnectedDistance": 50000.0,
+    "totalConnectedDuration": 98765.0,
+    "chargingMode": "AC",
+    "chargingTimeEstimationElectric": 3600,
+    "absType": "0K03",
     "_deleted": False,
 }
 
@@ -269,6 +280,66 @@ class TestNextServiceDistanceValue:
         assert _next_service_distance_value({"nextServiceRemainingDistance": None}) is None
 
 
+class TestLastActivatedValue:
+    """Tests for _last_activated_value."""
+
+    def test_returns_utc_datetime(self):
+        result = _last_activated_value(BIKE_WITH_NAME)
+        assert isinstance(result, datetime)
+        assert result.tzinfo == timezone.utc
+        expected = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        assert result == expected
+
+    def test_returns_none_when_missing(self):
+        assert _last_activated_value(BIKE_MISSING_FIELDS) is None
+
+    def test_returns_none_when_none(self):
+        assert _last_activated_value({"lastActivatedTime": None}) is None
+
+
+class TestTotalConnectedDistanceValue:
+    """Tests for _total_connected_distance_value."""
+
+    def test_converts_meters_to_km(self):
+        assert _total_connected_distance_value(BIKE_WITH_NAME) == 50.0
+
+    def test_returns_none_when_missing(self):
+        assert _total_connected_distance_value(BIKE_MISSING_FIELDS) is None
+
+    def test_returns_none_when_none(self):
+        assert _total_connected_distance_value({"totalConnectedDistance": None}) is None
+
+
+class TestTotalConnectedDurationValue:
+    """Tests for _total_connected_duration_value."""
+
+    def test_returns_float_passthrough(self):
+        assert _total_connected_duration_value(BIKE_WITH_NAME) == 98765.0
+
+    def test_returns_none_when_missing(self):
+        assert _total_connected_duration_value(BIKE_MISSING_FIELDS) is None
+
+
+class TestChargingModeValue:
+    """Tests for _charging_mode_value."""
+
+    def test_returns_string_passthrough(self):
+        assert _charging_mode_value(BIKE_WITH_NAME) == "AC"
+
+    def test_returns_none_when_missing(self):
+        assert _charging_mode_value(BIKE_MISSING_FIELDS) is None
+
+
+class TestChargingTimeEstimationValue:
+    """Tests for _charging_time_estimation_value."""
+
+    def test_returns_integer_passthrough(self):
+        assert _charging_time_estimation_value(BIKE_WITH_NAME) == 3600
+
+    def test_returns_none_when_missing(self):
+        assert _charging_time_estimation_value(BIKE_MISSING_FIELDS) is None
+
+
 # ---------------------------------------------------------------------------
 # Sensor description tests
 # ---------------------------------------------------------------------------
@@ -277,9 +348,9 @@ class TestNextServiceDistanceValue:
 class TestSensorDescriptions:
     """Tests for SENSOR_DESCRIPTIONS tuple."""
 
-    def test_eleven_descriptions_defined(self):
-        """Eleven sensor types defined (3 existing + 8 new)."""
-        assert len(SENSOR_DESCRIPTIONS) == 11
+    def test_sixteen_descriptions_defined(self):
+        """Sixteen sensor types defined (11 existing + 5 new)."""
+        assert len(SENSOR_DESCRIPTIONS) == 16
 
     def test_fuel_level_description(self):
         """ENTY-03: Fuel level has correct attributes."""
@@ -347,6 +418,29 @@ class TestSensorDescriptions:
         desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "next_service_distance"][0]
         assert desc.device_class == SensorDeviceClass.DISTANCE
         assert desc.state_class is None  # remaining distance decreases, not a measurement
+
+    def test_last_activated_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "last_activated"][0]
+        assert desc.device_class == SensorDeviceClass.TIMESTAMP
+
+    def test_total_connected_distance_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "total_connected_distance"][0]
+        assert desc.device_class == SensorDeviceClass.DISTANCE
+        assert desc.state_class == SensorStateClass.TOTAL_INCREASING
+
+    def test_total_connected_duration_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "total_connected_duration"][0]
+        assert desc.device_class == SensorDeviceClass.DURATION
+        assert desc.state_class == SensorStateClass.TOTAL_INCREASING
+
+    def test_charging_mode_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "charging_mode"][0]
+        assert desc.entity_registry_enabled_default is False
+
+    def test_charging_time_estimation_description(self):
+        desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "charging_time_estimation"][0]
+        assert desc.entity_registry_enabled_default is False
+        assert desc.device_class == SensorDeviceClass.DURATION
 
     def test_all_descriptions_have_explicit_name(self):
         """Every description sets name (not UNDEFINED) for custom-component entity ID generation."""
@@ -479,6 +573,39 @@ class TestBMWBikeSensor:
 
 
 # ---------------------------------------------------------------------------
+# Mileage extra_state_attributes tests
+# ---------------------------------------------------------------------------
+
+
+class TestMileageExtraStateAttributes:
+    """Tests for absType as extra_state_attributes on mileage sensor."""
+
+    def test_mileage_sensor_has_abs_type(self):
+        """absType appears as extra_state_attributes on the mileage sensor."""
+        vin = BIKE_WITH_NAME["vin"]
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        mileage_desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "mileage"][0]
+        sensor = BMWBikeSensor(coordinator, vin, mileage_desc)
+        assert sensor.extra_state_attributes == {"abs_type": "0K03"}
+
+    def test_non_mileage_sensor_no_extra_attributes(self):
+        """Non-mileage sensors return None for extra_state_attributes."""
+        vin = BIKE_WITH_NAME["vin"]
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        fuel_desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "fuel_level"][0]
+        sensor = BMWBikeSensor(coordinator, vin, fuel_desc)
+        assert sensor.extra_state_attributes is None
+
+    def test_mileage_no_abs_type_returns_none(self):
+        """Mileage sensor returns None when bike has no absType."""
+        vin = BIKE_MISSING_FIELDS["vin"]
+        coordinator = _make_mock_coordinator({vin: BIKE_MISSING_FIELDS})
+        mileage_desc = [d for d in SENSOR_DESCRIPTIONS if d.key == "mileage"][0]
+        sensor = BMWBikeSensor(coordinator, vin, mileage_desc)
+        assert sensor.extra_state_attributes is None
+
+
+# ---------------------------------------------------------------------------
 # async_setup_entry tests
 # ---------------------------------------------------------------------------
 
@@ -487,8 +614,8 @@ class TestAsyncSetupEntry:
     """Tests for async_setup_entry."""
 
     @pytest.mark.asyncio
-    async def test_creates_eleven_sensors_per_bike(self):
-        """11 sensors per bike: 3 existing + 8 new."""
+    async def test_creates_sixteen_sensors_per_bike(self):
+        """16 sensors per bike: 11 existing + 5 new."""
         coordinator = _make_mock_coordinator({
             "VIN001": BIKE_WITH_NAME,
         })
@@ -499,11 +626,11 @@ class TestAsyncSetupEntry:
 
         await async_setup_entry(MagicMock(), entry, async_add_entities)
 
-        assert len(added_entities) == 11
+        assert len(added_entities) == 16
 
     @pytest.mark.asyncio
-    async def test_creates_twentytwo_sensors_for_two_bikes(self):
-        """2 bikes = 22 entities total."""
+    async def test_creates_thirtytwo_sensors_for_two_bikes(self):
+        """2 bikes = 32 entities total."""
         coordinator = _make_mock_coordinator({
             "VIN001": BIKE_WITH_NAME,
             "VIN002": BIKE_NO_NAME,
@@ -515,7 +642,7 @@ class TestAsyncSetupEntry:
 
         await async_setup_entry(MagicMock(), entry, async_add_entities)
 
-        assert len(added_entities) == 22
+        assert len(added_entities) == 32
 
     @pytest.mark.asyncio
     async def test_all_entities_are_bmw_bike_sensor(self):
