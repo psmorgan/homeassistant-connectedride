@@ -11,7 +11,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from custom_components.bmw_connected_ride.auth import BMWAuthError
+from custom_components.bmw_connected_ride.auth import BMWAuthError, BMWTransientError
 from custom_components.bmw_connected_ride.coordinator import (
     BMWConnectedRideCoordinator,
     SCAN_INTERVAL,
@@ -202,6 +202,22 @@ class TestAsyncUpdateData:
         coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
 
         with pytest.raises(ConfigEntryAuthFailed, match="BMW auth failed"):
+            await coordinator._async_update_data()
+
+    @pytest.mark.asyncio
+    async def test_transient_error_from_auth_raises_update_failed(self):
+        """BMWTransientError from auth_client raises UpdateFailed (retryable), not ConfigEntryAuthFailed."""
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        auth.async_ensure_token_valid = AsyncMock(
+            side_effect=BMWTransientError("HTTP 500 — server error")
+        )
+        api = _make_mock_api_client()
+
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+
+        with pytest.raises(UpdateFailed, match="temporarily unavailable"):
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio

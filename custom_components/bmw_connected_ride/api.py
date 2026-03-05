@@ -142,7 +142,9 @@ class BMWApiClient:
         if abs_type is not None:
             body["absType"] = abs_type
 
-        async with self._session.post(url, json=body, headers=headers) as resp:
+        async with self._session.post(
+            url, json=body, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+        ) as resp:
             if resp.status == 401:
                 from .auth import BMWAuthError
 

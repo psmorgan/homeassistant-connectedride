@@ -22,7 +22,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class BMWAuthError(Exception):
-    """Raised for BMW authentication failures."""
+    """Raised for BMW authentication failures (permanent — needs re-auth)."""
+
+
+class BMWTransientError(Exception):
+    """Raised for transient BMW server errors (retryable — e.g. 429, 5xx)."""
 
 
 def generate_pkce() -> tuple[str, str]:
@@ -220,7 +224,8 @@ class BMWAuthClient:
         This is intentionally different from poll_for_token() per BMW's spec.
 
         Raises:
-            BMWAuthError: On 401/403 (re-auth required) or other HTTP errors.
+            BMWAuthError: On 401/403 (permanent — re-auth required).
+            BMWTransientError: On 429/5xx or network errors (retryable).
         """
         url = f"{GCDM_BASE_URL}/gcdm/oauth/token"
         credentials = f"{BMW_CLIENT_ID}:{BMW_CLIENT_SECRET}"
@@ -236,17 +241,26 @@ class BMWAuthClient:
 
         _LOGGER.debug("Refreshing BMW access token")
 
-        async with self._session.post(url, data=data, headers=headers) as resp:
-            if resp.status in (401, 403):
-                raise BMWAuthError(
-                    f"Token refresh failed — re-authentication required (HTTP {resp.status})"
-                )
-            if resp.status != 200:
-                text = await resp.text()
-                raise BMWAuthError(
-                    f"Token refresh failed: HTTP {resp.status} — {text}"
-                )
-            token_data: dict[str, Any] = await resp.json()
+        try:
+            async with self._session.post(url, data=data, headers=headers) as resp:
+                if resp.status in (401, 403):
+                    raise BMWAuthError(
+                        f"Token refresh failed — re-authentication required (HTTP {resp.status})"
+                    )
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise BMWTransientError(
+                        f"Token refresh failed (transient): HTTP {resp.status} — {text}"
+                    )
+                token_data: dict[str, Any] = await resp.json()
+        except BMWAuthError:
+            raise
+        except BMWTransientError:
+            raise
+        except (aiohttp.ClientError, asyncio.TimeoutError) as ex:
+            raise BMWTransientError(
+                f"Token refresh failed (network error): {ex}"
+            ) from ex
 
         self._store_tokens(token_data)
         _LOGGER.debug(

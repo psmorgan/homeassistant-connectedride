@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from custom_components.bmw_connected_ride.auth import (
     BMWAuthClient,
     BMWAuthError,
+    BMWTransientError,
     generate_pkce,
 )
 from custom_components.bmw_connected_ride.const import (
@@ -492,6 +493,94 @@ class TestRefreshTokens:
         data_str = str(data)
         assert BMW_CLIENT_SECRET not in data_str, \
             "_refresh_tokens must NOT include client_secret in form data (use Basic auth)"
+
+    @pytest.mark.asyncio
+    async def test_raises_transient_error_on_500(self):
+        """HTTP 500 raises BMWTransientError, not BMWAuthError."""
+        session = self._make_refresh_session(status=500, response_data={"error": "server_error"})
+        client = BMWAuthClient(
+            region="ROW",
+            session=session,
+            refresh_token="old_refresh",
+            token_expiry=int(time.time()) + 60,
+        )
+        with pytest.raises(BMWTransientError, match="transient"):
+            await client._refresh_tokens()
+
+    @pytest.mark.asyncio
+    async def test_raises_transient_error_on_502(self):
+        """HTTP 502 raises BMWTransientError."""
+        session = self._make_refresh_session(status=502, response_data={"error": "bad_gateway"})
+        client = BMWAuthClient(
+            region="ROW",
+            session=session,
+            refresh_token="old_refresh",
+            token_expiry=int(time.time()) + 60,
+        )
+        with pytest.raises(BMWTransientError, match="transient"):
+            await client._refresh_tokens()
+
+    @pytest.mark.asyncio
+    async def test_raises_transient_error_on_503(self):
+        """HTTP 503 raises BMWTransientError."""
+        session = self._make_refresh_session(status=503, response_data={"error": "unavailable"})
+        client = BMWAuthClient(
+            region="ROW",
+            session=session,
+            refresh_token="old_refresh",
+            token_expiry=int(time.time()) + 60,
+        )
+        with pytest.raises(BMWTransientError, match="transient"):
+            await client._refresh_tokens()
+
+    @pytest.mark.asyncio
+    async def test_raises_transient_error_on_429(self):
+        """HTTP 429 (rate limit) raises BMWTransientError."""
+        session = self._make_refresh_session(status=429, response_data={"error": "rate_limited"})
+        client = BMWAuthClient(
+            region="ROW",
+            session=session,
+            refresh_token="old_refresh",
+            token_expiry=int(time.time()) + 60,
+        )
+        with pytest.raises(BMWTransientError, match="transient"):
+            await client._refresh_tokens()
+
+    @pytest.mark.asyncio
+    async def test_raises_transient_error_on_network_error(self):
+        """Network errors (aiohttp.ClientError) raise BMWTransientError."""
+        mock_session = MagicMock(spec=aiohttp.ClientSession)
+        mock_cm = AsyncMock()
+        mock_cm.__aenter__ = AsyncMock(side_effect=aiohttp.ClientConnectionError("Connection reset"))
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        mock_session.post = MagicMock(return_value=mock_cm)
+
+        client = BMWAuthClient(
+            region="ROW",
+            session=mock_session,
+            refresh_token="old_refresh",
+            token_expiry=int(time.time()) + 60,
+        )
+        with pytest.raises(BMWTransientError, match="network error"):
+            await client._refresh_tokens()
+
+    @pytest.mark.asyncio
+    async def test_raises_transient_error_on_timeout(self):
+        """Timeout errors raise BMWTransientError."""
+        mock_session = MagicMock(spec=aiohttp.ClientSession)
+        mock_cm = AsyncMock()
+        mock_cm.__aenter__ = AsyncMock(side_effect=asyncio.TimeoutError())
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        mock_session.post = MagicMock(return_value=mock_cm)
+
+        client = BMWAuthClient(
+            region="ROW",
+            session=mock_session,
+            refresh_token="old_refresh",
+            token_expiry=int(time.time()) + 60,
+        )
+        with pytest.raises(BMWTransientError, match="network error"):
+            await client._refresh_tokens()
 
 
 # ---------------------------------------------------------------------------

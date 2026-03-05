@@ -11,7 +11,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import BMWApiClient, extract_image_views
-from .auth import BMWAuthClient, BMWAuthError
+from .auth import BMWAuthClient, BMWAuthError, BMWTransientError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +46,10 @@ class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]
             await self._auth_client.async_ensure_token_valid()
         except BMWAuthError as ex:
             raise ConfigEntryAuthFailed(f"BMW auth failed: {ex}") from ex
+        except BMWTransientError as ex:
+            raise UpdateFailed(
+                f"BMW token refresh temporarily unavailable: {ex}"
+            ) from ex
 
         # Persist refreshed tokens to config entry if they changed
         if self._auth_client.tokens_changed:

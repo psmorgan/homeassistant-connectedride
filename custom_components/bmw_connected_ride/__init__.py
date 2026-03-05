@@ -49,4 +49,6 @@ async def async_unload_entry(
     entry: BMWConnectedRideConfigEntry,
 ) -> bool:
     """Unload a config entry."""
+    coordinator: BMWConnectedRideCoordinator = entry.runtime_data
+    await coordinator.async_shutdown()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
