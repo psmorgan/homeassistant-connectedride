@@ -18,7 +18,11 @@ from custom_components.bmw_connected_ride.const import DOMAIN
 from custom_components.bmw_connected_ride.sensor import (
     BMWBikeSensor,
     BMWBikeSensorEntityDescription,
+    BMWLastRideSensor,
+    BMWLastRideSensorEntityDescription,
     SENSOR_DESCRIPTIONS,
+    LAST_RIDE_DESCRIPTIONS,
+    AGGREGATE_DESCRIPTIONS,
     _fuel_level_value,
     _remaining_range_value,
     _last_sync_value,
@@ -35,6 +39,27 @@ from custom_components.bmw_connected_ride.sensor import (
     _total_connected_duration_value,
     _charging_mode_value,
     _charging_time_estimation_value,
+    _last_ride_distance_value,
+    _last_ride_duration_value,
+    _last_ride_avg_speed_value,
+    _last_ride_max_speed_value,
+    _last_ride_max_temp_value,
+    _last_ride_min_temp_value,
+    _last_ride_max_elevation_value,
+    _last_ride_min_elevation_value,
+    _last_ride_lean_angle_left_value,
+    _last_ride_lean_angle_right_value,
+    _last_ride_max_acceleration_value,
+    _last_ride_max_deceleration_value,
+    _last_ride_start_time_value,
+    _last_ride_engine_max_rpm_value,
+    _total_ride_count_value,
+    _total_ride_distance_value,
+    _total_ride_duration_value,
+    _avg_ride_distance_value,
+    _avg_ride_duration_value,
+    _longest_ride_value,
+    _highest_lean_angle_value,
     async_setup_entry,
 )
 
@@ -614,48 +639,312 @@ class TestAsyncSetupEntry:
     """Tests for async_setup_entry."""
 
     @pytest.mark.asyncio
-    async def test_creates_sixteen_sensors_per_bike(self):
-        """16 sensors per bike: 11 existing + 5 new."""
-        coordinator = _make_mock_coordinator({
-            "VIN001": BIKE_WITH_NAME,
-        })
+    async def test_creates_thirtyseven_sensors_per_bike(self):
+        """37 sensors per bike: 16 bike + 14 last-ride + 7 aggregate."""
+        coordinator = _make_mock_coordinator({"VIN001": BIKE_WITH_NAME})
+        coordinator.tracks_data = {"VIN001": []}
         entry = MagicMock()
         entry.runtime_data = coordinator
         added_entities = []
         async_add_entities = MagicMock(side_effect=lambda e: added_entities.extend(e))
-
         await async_setup_entry(MagicMock(), entry, async_add_entities)
-
-        assert len(added_entities) == 16
+        assert len(added_entities) == 37
 
     @pytest.mark.asyncio
-    async def test_creates_thirtytwo_sensors_for_two_bikes(self):
-        """2 bikes = 32 entities total."""
-        coordinator = _make_mock_coordinator({
-            "VIN001": BIKE_WITH_NAME,
-            "VIN002": BIKE_NO_NAME,
-        })
+    async def test_creates_seventyfour_sensors_for_two_bikes(self):
+        """2 bikes = 74 entities total."""
+        coordinator = _make_mock_coordinator({"VIN001": BIKE_WITH_NAME, "VIN002": BIKE_NO_NAME})
+        coordinator.tracks_data = {"VIN001": [], "VIN002": []}
         entry = MagicMock()
         entry.runtime_data = coordinator
         added_entities = []
         async_add_entities = MagicMock(side_effect=lambda e: added_entities.extend(e))
-
         await async_setup_entry(MagicMock(), entry, async_add_entities)
-
-        assert len(added_entities) == 32
+        assert len(added_entities) == 74
 
     @pytest.mark.asyncio
-    async def test_all_entities_are_bmw_bike_sensor(self):
-        """All created entities are BMWBikeSensor instances."""
-        coordinator = _make_mock_coordinator({
-            "VIN001": BIKE_WITH_NAME,
-        })
+    async def test_all_entities_are_sensor_types(self):
+        """All created entities are BMWBikeSensor or BMWLastRideSensor."""
+        coordinator = _make_mock_coordinator({"VIN001": BIKE_WITH_NAME})
+        coordinator.tracks_data = {"VIN001": []}
         entry = MagicMock()
         entry.runtime_data = coordinator
         added_entities = []
         async_add_entities = MagicMock(side_effect=lambda e: added_entities.extend(e))
-
         await async_setup_entry(MagicMock(), entry, async_add_entities)
-
         for entity in added_entities:
-            assert isinstance(entity, BMWBikeSensor)
+            assert isinstance(entity, (BMWBikeSensor, BMWLastRideSensor))
+
+
+# ---------------------------------------------------------------------------
+# Last-ride and aggregate sensor tests
+# ---------------------------------------------------------------------------
+
+SAMPLE_TRACK_1 = {
+    "bikeId": "abc123hash",
+    "startTimestamp": 1735689600,
+    "rideDistance": 45000,
+    "rideTime": 3600,
+    "speedAverageKmh": 45.5,
+    "speedMaxKmh": 120.3,
+    "temperatureMaxC": 28.5,
+    "temperatureMinC": 12.0,
+    "elevationMaxM": 1500.0,
+    "elevationMinM": 200.0,
+    "leanAngleLeftMax": -35.2,
+    "leanAngleRightMax": 32.1,
+    "accelerationMax": 0.75,
+    "decelerationMax": 0.67,
+    "engineMaxRpm": 8500,
+    "_deleted": None,
+}
+
+SAMPLE_TRACK_2 = {
+    "bikeId": "abc123hash",
+    "startTimestamp": 1735600000,
+    "rideDistance": 30000,
+    "rideTime": 1800,
+    "speedAverageKmh": 60.0,
+    "speedMaxKmh": 110.0,
+    "temperatureMaxC": 25.0,
+    "temperatureMinC": 15.0,
+    "elevationMaxM": 800.0,
+    "elevationMinM": 100.0,
+    "leanAngleLeftMax": -28.0,
+    "leanAngleRightMax": 40.5,
+    "accelerationMax": 0.60,
+    "decelerationMax": 0.55,
+    "engineMaxRpm": 7200,
+    "_deleted": None,
+}
+
+SAMPLE_TRACKS = [SAMPLE_TRACK_1, SAMPLE_TRACK_2]
+
+
+class TestLastRideDistanceValue:
+    def test_converts_meters_to_km(self):
+        assert _last_ride_distance_value(SAMPLE_TRACKS) == 45.0
+
+    def test_returns_none_when_empty(self):
+        assert _last_ride_distance_value([]) is None
+
+    def test_returns_none_when_field_none(self):
+        assert _last_ride_distance_value([{"rideDistance": None}]) is None
+
+
+class TestLastRideDurationValue:
+    def test_returns_ride_time(self):
+        assert _last_ride_duration_value(SAMPLE_TRACKS) == 3600
+
+    def test_returns_none_when_empty(self):
+        assert _last_ride_duration_value([]) is None
+
+
+class TestLastRideAvgSpeedValue:
+    def test_returns_speed(self):
+        assert _last_ride_avg_speed_value(SAMPLE_TRACKS) == 45.5
+
+    def test_returns_none_when_empty(self):
+        assert _last_ride_avg_speed_value([]) is None
+
+
+class TestLastRideMaxSpeedValue:
+    def test_returns_max_speed(self):
+        assert _last_ride_max_speed_value(SAMPLE_TRACKS) == 120.3
+
+    def test_returns_none_when_empty(self):
+        assert _last_ride_max_speed_value([]) is None
+
+
+class TestLastRideTemperatureValues:
+    def test_max_temp(self):
+        assert _last_ride_max_temp_value(SAMPLE_TRACKS) == 28.5
+
+    def test_min_temp(self):
+        assert _last_ride_min_temp_value(SAMPLE_TRACKS) == 12.0
+
+    def test_max_temp_none_when_empty(self):
+        assert _last_ride_max_temp_value([]) is None
+
+    def test_min_temp_none_when_empty(self):
+        assert _last_ride_min_temp_value([]) is None
+
+
+class TestLastRideElevationValues:
+    def test_max_elevation(self):
+        assert _last_ride_max_elevation_value(SAMPLE_TRACKS) == 1500.0
+
+    def test_min_elevation(self):
+        assert _last_ride_min_elevation_value(SAMPLE_TRACKS) == 200.0
+
+    def test_none_when_empty(self):
+        assert _last_ride_max_elevation_value([]) is None
+
+
+class TestLastRideLeanAngleValues:
+    def test_left_returns_abs_value(self):
+        """Lean angle left can be negative -- abs() applied."""
+        assert _last_ride_lean_angle_left_value(SAMPLE_TRACKS) == 35.2
+
+    def test_right_returns_abs_value(self):
+        assert _last_ride_lean_angle_right_value(SAMPLE_TRACKS) == 32.1
+
+    def test_left_none_when_empty(self):
+        assert _last_ride_lean_angle_left_value([]) is None
+
+    def test_left_none_when_field_none(self):
+        assert _last_ride_lean_angle_left_value([{"leanAngleLeftMax": None}]) is None
+
+
+class TestLastRideAccelerationValues:
+    def test_max_acceleration(self):
+        assert _last_ride_max_acceleration_value(SAMPLE_TRACKS) == 0.75
+
+    def test_max_deceleration(self):
+        assert _last_ride_max_deceleration_value(SAMPLE_TRACKS) == 0.67
+
+    def test_none_when_empty(self):
+        assert _last_ride_max_acceleration_value([]) is None
+
+
+class TestLastRideStartTimeValue:
+    def test_returns_utc_datetime(self):
+        result = _last_ride_start_time_value(SAMPLE_TRACKS)
+        assert isinstance(result, datetime)
+        assert result.tzinfo == timezone.utc
+        assert result == datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    def test_returns_none_when_empty(self):
+        assert _last_ride_start_time_value([]) is None
+
+    def test_returns_none_when_field_none(self):
+        assert _last_ride_start_time_value([{"startTimestamp": None}]) is None
+
+
+class TestLastRideEngineMaxRpmValue:
+    def test_returns_rpm(self):
+        assert _last_ride_engine_max_rpm_value(SAMPLE_TRACKS) == 8500
+
+    def test_returns_none_when_empty(self):
+        assert _last_ride_engine_max_rpm_value([]) is None
+
+
+class TestTotalRideCountValue:
+    def test_returns_count(self):
+        assert _total_ride_count_value(SAMPLE_TRACKS) == 2
+
+    def test_returns_zero_when_empty(self):
+        assert _total_ride_count_value([]) == 0
+
+
+class TestTotalRideDistanceValue:
+    def test_returns_sum_in_km(self):
+        assert _total_ride_distance_value(SAMPLE_TRACKS) == 75.0
+
+    def test_returns_none_when_empty(self):
+        assert _total_ride_distance_value([]) is None
+
+
+class TestTotalRideDurationValue:
+    def test_returns_sum(self):
+        assert _total_ride_duration_value(SAMPLE_TRACKS) == 5400
+
+    def test_returns_none_when_empty(self):
+        assert _total_ride_duration_value([]) is None
+
+
+class TestAvgRideDistanceValue:
+    def test_returns_average_in_km(self):
+        assert _avg_ride_distance_value(SAMPLE_TRACKS) == 37.5
+
+    def test_returns_none_when_empty(self):
+        assert _avg_ride_distance_value([]) is None
+
+
+class TestAvgRideDurationValue:
+    def test_returns_average(self):
+        assert _avg_ride_duration_value(SAMPLE_TRACKS) == 2700
+
+    def test_returns_none_when_empty(self):
+        assert _avg_ride_duration_value([]) is None
+
+
+class TestLongestRideValue:
+    def test_returns_max_in_km(self):
+        assert _longest_ride_value(SAMPLE_TRACKS) == 45.0
+
+    def test_returns_none_when_empty(self):
+        assert _longest_ride_value([]) is None
+
+
+class TestHighestLeanAngleValue:
+    def test_returns_max_abs_across_both_sides(self):
+        assert _highest_lean_angle_value(SAMPLE_TRACKS) == 40.5
+
+    def test_returns_none_when_empty(self):
+        assert _highest_lean_angle_value([]) is None
+
+    def test_returns_none_when_all_angles_none(self):
+        assert _highest_lean_angle_value([{"leanAngleLeftMax": None, "leanAngleRightMax": None}]) is None
+
+    def test_handles_negative_left_angle(self):
+        assert _highest_lean_angle_value([{"leanAngleLeftMax": -50.0, "leanAngleRightMax": 30.0}]) == 50.0
+
+
+class TestLastRideDescriptions:
+    def test_fourteen_descriptions_defined(self):
+        assert len(LAST_RIDE_DESCRIPTIONS) == 14
+
+    def test_all_have_explicit_name(self):
+        for desc in LAST_RIDE_DESCRIPTIONS:
+            assert desc.name is not None, f"{desc.key}: name must be set"
+
+
+class TestAggregateDescriptions:
+    def test_seven_descriptions_defined(self):
+        assert len(AGGREGATE_DESCRIPTIONS) == 7
+
+    def test_all_use_measurement_state_class(self):
+        for desc in AGGREGATE_DESCRIPTIONS:
+            assert desc.state_class == SensorStateClass.MEASUREMENT, f"{desc.key} should be MEASUREMENT"
+
+    def test_all_have_explicit_name(self):
+        for desc in AGGREGATE_DESCRIPTIONS:
+            assert desc.name is not None, f"{desc.key}: name must be set"
+
+
+class TestBMWLastRideSensor:
+    def test_reads_from_tracks_data(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.tracks_data = {vin: SAMPLE_TRACKS}
+        sensor = BMWLastRideSensor(coordinator, vin, LAST_RIDE_DESCRIPTIONS[0])
+        assert sensor.native_value == 45.0
+
+    def test_returns_none_when_no_tracks(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.tracks_data = {vin: []}
+        sensor = BMWLastRideSensor(coordinator, vin, LAST_RIDE_DESCRIPTIONS[0])
+        assert sensor.native_value is None
+
+    def test_returns_none_when_vin_missing(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.tracks_data = {}
+        sensor = BMWLastRideSensor(coordinator, vin, LAST_RIDE_DESCRIPTIONS[0])
+        assert sensor.native_value is None
+
+    def test_unique_id(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.tracks_data = {vin: []}
+        sensor = BMWLastRideSensor(coordinator, vin, LAST_RIDE_DESCRIPTIONS[0])
+        assert sensor._attr_unique_id == f"{vin}_last_ride_distance"
+
+    def test_device_info_matches_bike(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.tracks_data = {vin: []}
+        sensor = BMWLastRideSensor(coordinator, vin, LAST_RIDE_DESCRIPTIONS[0])
+        assert sensor._attr_device_info["identifiers"] == {(DOMAIN, vin)}

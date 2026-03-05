@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.components.sensor.const import SensorDeviceClass, SensorStateClass
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfPressure, UnitOfTime
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfPressure, UnitOfSpeed, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -311,10 +311,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up BMW Connected Ride sensor entities from a config entry."""
     coordinator: BMWConnectedRideCoordinator = entry.runtime_data
-    entities: list[BMWBikeSensor] = []
+    entities: list[BMWBikeSensor | BMWLastRideSensor] = []
     for vin in coordinator.data:
         for description in SENSOR_DESCRIPTIONS:
             entities.append(BMWBikeSensor(coordinator, vin, description))
+        for description in LAST_RIDE_DESCRIPTIONS:
+            entities.append(BMWLastRideSensor(coordinator, vin, description))
+        for description in AGGREGATE_DESCRIPTIONS:
+            entities.append(BMWLastRideSensor(coordinator, vin, description))
     async_add_entities(entities)
 
 
@@ -363,3 +367,415 @@ class BMWBikeSensor(CoordinatorEntity[BMWConnectedRideCoordinator], SensorEntity
         if abs_type is None:
             return None
         return {"abs_type": abs_type}
+
+
+# ---------------------------------------------------------------------------
+# Last-ride and aggregate sensor descriptions
+# ---------------------------------------------------------------------------
+
+
+class BMWLastRideSensorEntityDescription(SensorEntityDescription, frozen_or_thawed=True):
+    """Describes a sensor derived from recorded tracks data."""
+
+    value_fn: Callable[[list[dict[str, Any]]], object | None] = lambda t: None
+
+    def __init__(  # noqa: PLR0913 - explicit __init__ needed for pyright to see all params
+        self,
+        *,
+        key: str,
+        value_fn: Callable[[list[dict[str, Any]]], object | None],
+        device_class: SensorDeviceClass | None = None,
+        entity_category: EntityCategory | None = None,
+        entity_registry_enabled_default: bool = True,
+        entity_registry_visible_default: bool = True,
+        force_update: bool = False,
+        icon: str | None = None,
+        has_entity_name: bool = False,
+        name: str | UndefinedType | None = UNDEFINED,
+        translation_key: str | None = None,
+        native_unit_of_measurement: str | None = None,
+        state_class: SensorStateClass | str | None = None,
+        suggested_display_precision: int | None = None,
+    ) -> None:
+        """Initialize BMWLastRideSensorEntityDescription."""
+        ...
+
+
+# -- Last-ride value functions (take tracks list, use index [0]) --
+
+
+def _last_ride_distance_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    raw = tracks[0].get("rideDistance")
+    if raw is None:
+        return None
+    return round(raw / 1000, 1)  # type: ignore[operator]  # API returns numeric
+
+
+def _last_ride_duration_value(tracks: list[dict[str, Any]]) -> int | None:
+    if not tracks:
+        return None
+    return tracks[0].get("rideTime")  # type: ignore[return-value]
+
+
+def _last_ride_avg_speed_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    return tracks[0].get("speedAverageKmh")  # type: ignore[return-value]
+
+
+def _last_ride_max_speed_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    return tracks[0].get("speedMaxKmh")  # type: ignore[return-value]
+
+
+def _last_ride_max_temp_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    return tracks[0].get("temperatureMaxC")  # type: ignore[return-value]
+
+
+def _last_ride_min_temp_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    return tracks[0].get("temperatureMinC")  # type: ignore[return-value]
+
+
+def _last_ride_max_elevation_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    return tracks[0].get("elevationMaxM")  # type: ignore[return-value]
+
+
+def _last_ride_min_elevation_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    return tracks[0].get("elevationMinM")  # type: ignore[return-value]
+
+
+def _last_ride_lean_angle_left_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    raw = tracks[0].get("leanAngleLeftMax")
+    if raw is None:
+        return None
+    return abs(raw)  # type: ignore[arg-type]  # API returns numeric; can be negative
+
+
+def _last_ride_lean_angle_right_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    raw = tracks[0].get("leanAngleRightMax")
+    if raw is None:
+        return None
+    return abs(raw)  # type: ignore[arg-type]  # API returns numeric
+
+
+def _last_ride_max_acceleration_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    return tracks[0].get("accelerationMax")  # type: ignore[return-value]
+
+
+def _last_ride_max_deceleration_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    return tracks[0].get("decelerationMax")  # type: ignore[return-value]
+
+
+def _last_ride_start_time_value(tracks: list[dict[str, Any]]) -> datetime | None:
+    if not tracks:
+        return None
+    ts = tracks[0].get("startTimestamp")
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(ts, tz=timezone.utc)  # type: ignore[arg-type]
+
+
+def _last_ride_engine_max_rpm_value(tracks: list[dict[str, Any]]) -> int | None:
+    if not tracks:
+        return None
+    return tracks[0].get("engineMaxRpm")  # type: ignore[return-value]
+
+
+LAST_RIDE_DESCRIPTIONS: tuple[BMWLastRideSensorEntityDescription, ...] = (
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_distance",
+        translation_key="last_ride_distance",
+        name="Last ride distance",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_last_ride_distance_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_duration",
+        translation_key="last_ride_duration",
+        name="Last ride duration",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_last_ride_duration_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_avg_speed",
+        translation_key="last_ride_avg_speed",
+        name="Last ride avg speed",
+        device_class=SensorDeviceClass.SPEED,
+        native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_last_ride_avg_speed_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_max_speed",
+        translation_key="last_ride_max_speed",
+        name="Last ride max speed",
+        device_class=SensorDeviceClass.SPEED,
+        native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_last_ride_max_speed_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_max_temp",
+        translation_key="last_ride_max_temp",
+        name="Last ride max temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_last_ride_max_temp_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_min_temp",
+        translation_key="last_ride_min_temp",
+        name="Last ride min temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_last_ride_min_temp_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_max_elevation",
+        translation_key="last_ride_max_elevation",
+        name="Last ride max elevation",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.METERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_last_ride_max_elevation_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_min_elevation",
+        translation_key="last_ride_min_elevation",
+        name="Last ride min elevation",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.METERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_last_ride_min_elevation_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_lean_angle_left",
+        translation_key="last_ride_lean_angle_left",
+        name="Last ride max lean angle left",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:angle-acute",
+        value_fn=_last_ride_lean_angle_left_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_lean_angle_right",
+        translation_key="last_ride_lean_angle_right",
+        name="Last ride max lean angle right",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:angle-acute",
+        value_fn=_last_ride_lean_angle_right_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_max_acceleration",
+        translation_key="last_ride_max_acceleration",
+        name="Last ride max acceleration",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_last_ride_max_acceleration_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_max_deceleration",
+        translation_key="last_ride_max_deceleration",
+        name="Last ride max deceleration",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_last_ride_max_deceleration_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_start_time",
+        translation_key="last_ride_start_time",
+        name="Last ride start time",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=_last_ride_start_time_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="last_ride_engine_max_rpm",
+        translation_key="last_ride_engine_max_rpm",
+        name="Last ride engine max RPM",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:engine",
+        value_fn=_last_ride_engine_max_rpm_value,
+    ),
+)
+
+
+# -- Aggregate value functions (take tracks list, compute across all) --
+
+
+def _total_ride_count_value(tracks: list[dict[str, Any]]) -> int:
+    return len(tracks)
+
+
+def _total_ride_distance_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    total = sum(t.get("rideDistance") or 0 for t in tracks)
+    return round(total / 1000, 1)  # type: ignore[operator]
+
+
+def _total_ride_duration_value(tracks: list[dict[str, Any]]) -> int | None:
+    if not tracks:
+        return None
+    return sum(t.get("rideTime") or 0 for t in tracks)
+
+
+def _avg_ride_distance_value(tracks: list[dict[str, Any]]) -> float | None:
+    if not tracks:
+        return None
+    total = sum(t.get("rideDistance") or 0 for t in tracks)
+    return round(total / len(tracks) / 1000, 1)  # type: ignore[operator]
+
+
+def _avg_ride_duration_value(tracks: list[dict[str, Any]]) -> int | None:
+    if not tracks:
+        return None
+    total = sum(t.get("rideTime") or 0 for t in tracks)
+    return round(total / len(tracks))
+
+
+def _longest_ride_value(tracks: list[dict[str, Any]]) -> float | None:
+    distances = [t.get("rideDistance") for t in tracks if t.get("rideDistance") is not None]
+    if not distances:
+        return None
+    return round(max(distances) / 1000, 1)  # type: ignore[arg-type, operator]
+
+
+def _highest_lean_angle_value(tracks: list[dict[str, Any]]) -> float | None:
+    angles: list[float] = []
+    for t in tracks:
+        left = t.get("leanAngleLeftMax")
+        right = t.get("leanAngleRightMax")
+        if left is not None:
+            angles.append(abs(left))  # type: ignore[arg-type]
+        if right is not None:
+            angles.append(abs(right))  # type: ignore[arg-type]
+    if not angles:
+        return None
+    return max(angles)
+
+
+AGGREGATE_DESCRIPTIONS: tuple[BMWLastRideSensorEntityDescription, ...] = (
+    BMWLastRideSensorEntityDescription(
+        key="total_ride_count",
+        translation_key="total_ride_count",
+        name="Total ride count",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:counter",
+        value_fn=_total_ride_count_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="total_ride_distance",
+        translation_key="total_ride_distance",
+        name="Total ride distance",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_total_ride_distance_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="total_ride_duration",
+        translation_key="total_ride_duration",
+        name="Total ride duration",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_total_ride_duration_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="avg_ride_distance",
+        translation_key="avg_ride_distance",
+        name="Average ride distance",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_avg_ride_distance_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="avg_ride_duration",
+        translation_key="avg_ride_duration",
+        name="Average ride duration",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_avg_ride_duration_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="longest_ride",
+        translation_key="longest_ride",
+        name="Longest ride",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=_longest_ride_value,
+    ),
+    BMWLastRideSensorEntityDescription(
+        key="highest_lean_angle",
+        translation_key="highest_lean_angle",
+        name="Highest lean angle",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:angle-acute",
+        value_fn=_highest_lean_angle_value,
+    ),
+)
+
+
+class BMWLastRideSensor(CoordinatorEntity[BMWConnectedRideCoordinator], SensorEntity):
+    """Sensor showing data from recorded rides (last ride or aggregate)."""
+
+    _attr_has_entity_name = True
+    entity_description: BMWLastRideSensorEntityDescription  # type: ignore[override]  # Narrowing entity_description type for this entity subclass
+
+    def __init__(
+        self,
+        coordinator: BMWConnectedRideCoordinator,
+        vin: str,
+        description: BMWLastRideSensorEntityDescription,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description  # type: ignore[override]  # Narrowing entity_description to subclass type; standard HA pattern
+        self._attr_translation_key = description.translation_key
+        self._vin = vin
+        self._attr_unique_id = f"{vin}_{description.key}"
+        bike = coordinator.data[vin]
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, vin)},
+            name=bike.get("name") or vin,
+            manufacturer="BMW Motorrad",
+        )
+
+    @property
+    def native_value(self) -> object | None:  # type: ignore[override]  # HA base uses cached_property; runtime behavior is correct
+        """Return the sensor value from coordinator tracks data."""
+        tracks = self.coordinator.tracks_data.get(self._vin, [])
+        return self.entity_description.value_fn(tracks)
