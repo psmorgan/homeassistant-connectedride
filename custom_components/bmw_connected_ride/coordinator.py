@@ -18,6 +18,31 @@ _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=30)
 
 
+def _map_tracks_to_vins(
+    tracks: list[dict[str, Any]],
+    bikes: dict[str, dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Map recorded tracks to VINs via hashedLongVin -> bikeId matching."""
+    hash_to_vin: dict[str, str] = {
+        bike.get("hashedLongVin", ""): vin
+        for vin, bike in bikes.items()
+        if bike.get("hashedLongVin")
+    }
+    result: dict[str, list[dict[str, Any]]] = {vin: [] for vin in bikes}
+    for track in tracks:
+        if track.get("_deleted"):
+            continue
+        bike_id = track.get("bikeId")
+        vin = hash_to_vin.get(bike_id or "")
+        if vin:
+            result[vin].append(track)
+        else:
+            _LOGGER.debug("Track bikeId %s does not match any known bike", bike_id)
+    for vin in result:
+        result[vin].sort(key=lambda t: t.get("startTimestamp", 0), reverse=True)
+    return result
+
+
 class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     """Coordinator for BMW Connected Ride -- polls Cloud Sync bikes every 30 min."""
 
@@ -39,6 +64,7 @@ class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]
         self._api_client = api_client
         self.vehicle_info: dict[str, dict[str, Any]] = {}
         self.image_cache: dict[str, dict[str, tuple[bytes, str]]] = {}
+        self.tracks_data: dict[str, list[dict[str, Any]]] = {}
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         """Fetch all bikes from Cloud Sync. Returns dict keyed by VIN."""
@@ -74,11 +100,21 @@ class BMWConnectedRideCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]
             raise UpdateFailed(f"Cannot fetch BMW bike data: {ex}") from ex
 
         # Key by VIN, filter deleted bikes
-        return {
+        bike_dict = {
             bike["vin"]: bike
             for bike in bikes
             if not bike.get("_deleted", False)
         }
+
+        # Fetch tracks and map to VINs
+        try:
+            tracks = await self._api_client.async_get_recorded_tracks(access_token)
+            self.tracks_data = _map_tracks_to_vins(tracks, bike_dict)
+        except Exception as ex:
+            _LOGGER.warning("Cannot fetch recorded tracks: %s", ex)
+            self.tracks_data = {vin: [] for vin in bike_dict}
+
+        return bike_dict
 
     async def async_fetch_vehicle_info(self) -> None:
         """Fetch static vehicle info (images, model data) for all bikes.

@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from custom_components.bmw_connected_ride.api import (
     BMWApiClient,
     BIKES_PATH,
+    RECORDED_TRACKS_PATH,
     STATICDATA_PATH,
     STATICDATA_API_KEY,
     extract_image_views,
@@ -519,3 +520,97 @@ class TestAsyncDownloadImage:
 
         assert result is not None
         assert result[1] == "image/jpeg"
+
+
+# ---------------------------------------------------------------------------
+# TestAsyncGetRecordedTracks
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncGetRecordedTracks:
+    """Tests for BMWApiClient.async_get_recorded_tracks."""
+
+    @pytest.mark.asyncio
+    async def test_returns_list_of_tracks(self):
+        """Successful GET returns list of tracks from 'recordedtracks' key."""
+        tracks = [{"bikeId": "abc", "rideDistance": 1000}, {"bikeId": "abc", "rideDistance": 2000}]
+        resp = _make_mock_response(200, json_data={"recordedtracks": tracks})
+        session = _make_mock_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        result = await client.async_get_recorded_tracks(TEST_ACCESS_TOKEN)
+        assert result == tracks
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_correct_url(self):
+        resp = _make_mock_response(200, json_data={"recordedtracks": []})
+        session = _make_mock_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        await client.async_get_recorded_tracks(TEST_ACCESS_TOKEN)
+        expected_url = f"{TEST_BASE_URL}/{RECORDED_TRACKS_PATH}"
+        call_args = session.get.call_args
+        assert call_args[0][0] == expected_url
+
+    @pytest.mark.asyncio
+    async def test_correct_headers(self):
+        resp = _make_mock_response(200, json_data={"recordedtracks": []})
+        session = _make_mock_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        await client.async_get_recorded_tracks(TEST_ACCESS_TOKEN)
+        call_kwargs = session.get.call_args[1]
+        headers = call_kwargs["headers"]
+        assert headers["Authorization"] == f"Bearer {TEST_ACCESS_TOKEN}"
+        assert headers["Content-Type"] == "application/json"
+        assert headers["X-Client-ID"] == TEST_CLIENT_ID_HEADER
+
+    @pytest.mark.asyncio
+    async def test_correct_query_params(self):
+        resp = _make_mock_response(200, json_data={"recordedtracks": []})
+        session = _make_mock_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        await client.async_get_recorded_tracks(TEST_ACCESS_TOKEN)
+        call_kwargs = session.get.call_args[1]
+        assert call_kwargs["params"] == {"limit": 200}
+
+    @pytest.mark.asyncio
+    async def test_uses_lowercase_key(self):
+        """Response uses 'recordedtracks' (lowercase) not 'recordedTracks'."""
+        tracks = [{"bikeId": "abc"}]
+        resp = _make_mock_response(200, json_data={"recordedtracks": tracks})
+        session = _make_mock_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        result = await client.async_get_recorded_tracks(TEST_ACCESS_TOKEN)
+        assert result == tracks
+
+    @pytest.mark.asyncio
+    async def test_401_raises_bmw_auth_error(self):
+        resp = _make_mock_response(401)
+        session = _make_mock_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        with pytest.raises(BMWAuthError, match="401"):
+            await client.async_get_recorded_tracks(TEST_ACCESS_TOKEN)
+
+    @pytest.mark.asyncio
+    async def test_500_raises_client_response_error(self):
+        resp = _make_mock_response(500)
+        session = _make_mock_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        with pytest.raises(aiohttp.ClientResponseError):
+            await client.async_get_recorded_tracks(TEST_ACCESS_TOKEN)
+
+    @pytest.mark.asyncio
+    async def test_empty_tracks_key(self):
+        """Missing 'recordedtracks' key returns empty list."""
+        resp = _make_mock_response(200, json_data={"otherField": "value"})
+        session = _make_mock_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        result = await client.async_get_recorded_tracks(TEST_ACCESS_TOKEN)
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_empty_tracks_list(self):
+        resp = _make_mock_response(200, json_data={"recordedtracks": []})
+        session = _make_mock_session(resp)
+        client = BMWApiClient(session=session, region=TEST_REGION, client_id_header=TEST_CLIENT_ID_HEADER)
+        result = await client.async_get_recorded_tracks(TEST_ACCESS_TOKEN)
+        assert result == []

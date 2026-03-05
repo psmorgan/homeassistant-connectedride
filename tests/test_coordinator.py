@@ -15,6 +15,7 @@ from custom_components.bmw_connected_ride.auth import BMWAuthError, BMWTransient
 from custom_components.bmw_connected_ride.coordinator import (
     BMWConnectedRideCoordinator,
     SCAN_INTERVAL,
+    _map_tracks_to_vins,
 )
 
 # We need to mock HA imports used by coordinator
@@ -33,6 +34,7 @@ SAMPLE_BIKES = [
         "fuelLevel": 72,
         "remainingRange": 245000.0,
         "lastConnectedTime": 1735689600,
+        "hashedLongVin": "abc123hash",
         "_deleted": False,
     },
     {
@@ -41,7 +43,35 @@ SAMPLE_BIKES = [
         "fuelLevel": 45,
         "remainingRange": 120000.0,
         "lastConnectedTime": 1735600000,
+        "hashedLongVin": "def456hash",
         "_deleted": False,
+    },
+]
+
+SAMPLE_TRACKS = [
+    {
+        "bikeId": "abc123hash",
+        "startTimestamp": 1735600000,
+        "rideDistance": 30000,
+        "rideTime": 1800,
+        "speedAverageKmh": 60.0,
+        "_deleted": None,
+    },
+    {
+        "bikeId": "abc123hash",
+        "startTimestamp": 1735689600,
+        "rideDistance": 45000,
+        "rideTime": 3600,
+        "speedAverageKmh": 45.5,
+        "_deleted": None,
+    },
+    {
+        "bikeId": "def456hash",
+        "startTimestamp": 1735650000,
+        "rideDistance": 20000,
+        "rideTime": 1200,
+        "speedAverageKmh": 55.0,
+        "_deleted": None,
     },
 ]
 
@@ -81,10 +111,11 @@ def _make_mock_auth_client(tokens_changed=False):
     return auth
 
 
-def _make_mock_api_client(bikes=None):
+def _make_mock_api_client(bikes=None, tracks=None):
     """Create a mock BMWApiClient."""
     api = MagicMock()
     api.async_get_bikes = AsyncMock(return_value=bikes if bikes is not None else SAMPLE_BIKES)
+    api.async_get_recorded_tracks = AsyncMock(return_value=tracks if tracks is not None else SAMPLE_TRACKS)
     return api
 
 
@@ -366,3 +397,107 @@ class TestImageCache:
 
         assert "WB10X0X00X0000001" in coordinator.image_cache
         assert coordinator.image_cache["WB10X0X00X0000001"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Tracks data tests
+# ---------------------------------------------------------------------------
+
+
+class TestTracksData:
+    """Tests for coordinator tracks_data."""
+
+    def test_tracks_data_initialized_empty(self):
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_mock_api_client()
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+        assert coordinator.tracks_data == {}
+
+    @pytest.mark.asyncio
+    async def test_tracks_data_populated_after_update(self):
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_mock_api_client()
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+        await coordinator._async_update_data()
+        assert "WB10X0X00X0000001" in coordinator.tracks_data
+        assert "WB10X0X00X0000002" in coordinator.tracks_data
+
+    @pytest.mark.asyncio
+    async def test_tracks_mapped_by_hashed_long_vin(self):
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_mock_api_client()
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+        await coordinator._async_update_data()
+        # Tracks with bikeId="abc123hash" should be under VIN WB10X0X00X0000001
+        assert len(coordinator.tracks_data["WB10X0X00X0000001"]) == 2
+        assert len(coordinator.tracks_data["WB10X0X00X0000002"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_tracks_sorted_descending_by_start_timestamp(self):
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_mock_api_client()
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+        await coordinator._async_update_data()
+        tracks = coordinator.tracks_data["WB10X0X00X0000001"]
+        assert tracks[0]["startTimestamp"] > tracks[1]["startTimestamp"]
+
+    @pytest.mark.asyncio
+    async def test_deleted_tracks_filtered(self):
+        tracks_with_deleted = SAMPLE_TRACKS + [
+            {"bikeId": "abc123hash", "startTimestamp": 1735700000, "rideDistance": 5000, "_deleted": True},
+        ]
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_mock_api_client(tracks=tracks_with_deleted)
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+        await coordinator._async_update_data()
+        # VIN001 should still have 2 tracks (deleted one excluded)
+        assert len(coordinator.tracks_data["WB10X0X00X0000001"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_tracks_fetch_failure_logs_warning_continues(self):
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_mock_api_client()
+        api.async_get_recorded_tracks = AsyncMock(side_effect=Exception("Network error"))
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+        result = await coordinator._async_update_data()
+        # Bike data still returned
+        assert "WB10X0X00X0000001" in result
+        # tracks_data has empty lists
+        assert coordinator.tracks_data["WB10X0X00X0000001"] == []
+
+    @pytest.mark.asyncio
+    async def test_unmatched_track_bike_id_skipped(self):
+        tracks_with_unknown = SAMPLE_TRACKS + [
+            {"bikeId": "unknown_hash", "startTimestamp": 1735700000, "rideDistance": 999, "_deleted": None},
+        ]
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_mock_api_client(tracks=tracks_with_unknown)
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+        await coordinator._async_update_data()
+        total = sum(len(t) for t in coordinator.tracks_data.values())
+        assert total == 3  # Only the 3 matched tracks
+
+    @pytest.mark.asyncio
+    async def test_bike_data_still_returned_when_tracks_fail(self):
+        hass = _make_mock_hass()
+        entry = _make_mock_entry()
+        auth = _make_mock_auth_client()
+        api = _make_mock_api_client()
+        api.async_get_recorded_tracks = AsyncMock(side_effect=Exception("Boom"))
+        coordinator = BMWConnectedRideCoordinator(hass, entry, auth, api)
+        result = await coordinator._async_update_data()
+        assert result["WB10X0X00X0000001"]["name"] == "My R 1300 GS"

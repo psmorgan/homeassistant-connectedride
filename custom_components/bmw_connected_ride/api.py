@@ -8,6 +8,7 @@ import aiohttp
 from .const import REGION_CONFIGS
 
 BIKES_PATH = "cnrd/cloudsync/v2/bikes"
+RECORDED_TRACKS_PATH = "cnrd/cloudsync/v2/recordedTracks"
 STATICDATA_PATH = "cnrd/bike/v2/staticdata"
 STATICDATA_API_KEY = "9dcd9fb1-3118-468d-86fc-d6dfca50c492"
 
@@ -91,6 +92,37 @@ class BMWApiClient:
             data: dict[str, Any] = await resp.json()
         bikes: list[dict[str, Any]] = data.get("bikes", [])
         return bikes
+
+    async def async_get_recorded_tracks(self, access_token: str) -> list[dict[str, Any]]:
+        """GET /cnrd/cloudsync/v2/recordedTracks?limit=200 -- returns ride recordings.
+
+        Returns:
+            List of recorded track dicts. Response key is 'recordedtracks' (lowercase).
+
+        Raises:
+            BMWAuthError: On HTTP 401 (token invalid/expired).
+            aiohttp.ClientResponseError: On other non-200 responses.
+        """
+        url = f"{self._base_url}/{RECORDED_TRACKS_PATH}"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "X-Client-ID": self._client_id_header,
+        }
+        async with self._session.get(
+            url, params={"limit": 200}, headers=headers
+        ) as resp:
+            if resp.status == 401:
+                from .auth import BMWAuthError
+
+                raise BMWAuthError(
+                    "Unauthorized (HTTP 401) -- token invalid or expired"
+                )
+            resp.raise_for_status()
+            data: dict[str, Any] = await resp.json()
+        # Note: JSON key is "recordedtracks" (all lowercase) per production verification
+        tracks: list[dict[str, Any]] = data.get("recordedtracks", [])
+        return tracks
 
     async def async_download_image(self, url: str) -> tuple[bytes, str] | None:
         """Download image bytes from a URL. Returns (bytes, content_type) or None.
