@@ -8,20 +8,45 @@
 [license-badge]: https://img.shields.io/badge/License-MIT-yellow.svg
 [license-url]: LICENSE
 
-A Home Assistant custom integration for BMW motorcycles using the BMW Connected Ride API. Exposes motorcycle telemetry as sensors, a GPS device tracker, and motorcycle images.
+A Home Assistant custom integration for BMW motorcycles using the BMW Connected Ride API. Exposes 37 sensors per motorcycle including telemetry, ride statistics, GPS tracking, and motorcycle images.
 
 ![BMW Connected Ride screenshot](images/screenshot.png)
 
 ## Features
 
+### Core Telemetry
+
 - Fuel level and remaining range
-- Energy level and electric range (electric/hybrid models)
+- Energy level and electric range (electric/hybrid models, disabled by default)
 - Front and rear tire pressures
-- Odometer (mileage)
+- Odometer (mileage) with ABS type info
 - Trip distance
 - Next service date and distance to service
 - GPS device tracker
 - Motorcycle images (side views, rider views)
+
+### Bike Field Sensors
+
+- Last activated timestamp
+- Total connected distance and duration
+- Charging mode and charging time estimation (electric models)
+
+### Last Ride Statistics — 14 sensors from recorded tracks
+
+- Distance, duration, average and max speed
+- Min and max ambient temperature
+- Elevation gain and loss
+- Max lean angles (left and right)
+- Max acceleration and braking
+- Max RPM
+
+### Aggregate Ride Statistics — 7 sensors from all recorded tracks
+
+- Total ride count
+- Total and average distance
+- Total and average duration
+- Longest ride distance
+- Highest lean angle
 
 ## Installation
 
