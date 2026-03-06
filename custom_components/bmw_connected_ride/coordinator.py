@@ -22,18 +22,18 @@ def _map_tracks_to_vins(
     tracks: list[dict[str, Any]],
     bikes: dict[str, dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
-    """Map recorded tracks to VINs via hashedLongVin -> bikeId matching."""
-    hash_to_vin: dict[str, str] = {
-        bike.get("hashedLongVin", ""): vin
+    """Map recorded tracks to VINs via vehicleId -> bikeId matching."""
+    vehicle_id_to_vin: dict[str, str] = {
+        bike.get("vehicleId", ""): vin
         for vin, bike in bikes.items()
-        if bike.get("hashedLongVin")
+        if bike.get("vehicleId")
     }
     result: dict[str, list[dict[str, Any]]] = {vin: [] for vin in bikes}
     for track in tracks:
         if track.get("_deleted"):
             continue
         bike_id = track.get("bikeId")
-        vin = hash_to_vin.get(bike_id or "")
+        vin = vehicle_id_to_vin.get(bike_id or "")
         if vin:
             result[vin].append(track)
         else:

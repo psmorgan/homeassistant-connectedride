@@ -425,10 +425,7 @@ def _last_ride_avg_speed_value(tracks: list[dict[str, Any]]) -> float | None:
     return tracks[0].get("speedAverageKmh")  # type: ignore[return-value]
 
 
-def _last_ride_max_speed_value(tracks: list[dict[str, Any]]) -> float | None:
-    if not tracks:
-        return None
-    return tracks[0].get("speedMaxKmh")  # type: ignore[return-value]
+  # type: ignore[return-value]
 
 
 def _last_ride_max_temp_value(tracks: list[dict[str, Any]]) -> float | None:
@@ -531,16 +528,6 @@ LAST_RIDE_DESCRIPTIONS: tuple[BMWLastRideSensorEntityDescription, ...] = (
         value_fn=_last_ride_avg_speed_value,
     ),
     BMWLastRideSensorEntityDescription(
-        key="last_ride_max_speed",
-        translation_key="last_ride_max_speed",
-        name="Last ride max speed",
-        device_class=SensorDeviceClass.SPEED,
-        native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=1,
-        value_fn=_last_ride_max_speed_value,
-    ),
-    BMWLastRideSensorEntityDescription(
         key="last_ride_max_temp",
         translation_key="last_ride_max_temp",
         name="Last ride max temperature",
@@ -582,7 +569,9 @@ LAST_RIDE_DESCRIPTIONS: tuple[BMWLastRideSensorEntityDescription, ...] = (
         key="last_ride_lean_angle_left",
         translation_key="last_ride_lean_angle_left",
         name="Last ride max lean angle left",
+        native_unit_of_measurement="°",
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
         icon="mdi:angle-acute",
         value_fn=_last_ride_lean_angle_left_value,
     ),
@@ -590,7 +579,9 @@ LAST_RIDE_DESCRIPTIONS: tuple[BMWLastRideSensorEntityDescription, ...] = (
         key="last_ride_lean_angle_right",
         translation_key="last_ride_lean_angle_right",
         name="Last ride max lean angle right",
+        native_unit_of_measurement="°",
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
         icon="mdi:angle-acute",
         value_fn=_last_ride_lean_angle_right_value,
     ),
@@ -598,14 +589,20 @@ LAST_RIDE_DESCRIPTIONS: tuple[BMWLastRideSensorEntityDescription, ...] = (
         key="last_ride_max_acceleration",
         translation_key="last_ride_max_acceleration",
         name="Last ride max acceleration",
+        native_unit_of_measurement="g",
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        icon="mdi:speedometer",
         value_fn=_last_ride_max_acceleration_value,
     ),
     BMWLastRideSensorEntityDescription(
         key="last_ride_max_deceleration",
         translation_key="last_ride_max_deceleration",
         name="Last ride max deceleration",
+        native_unit_of_measurement="g",
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        icon="mdi:speedometer-slow",
         value_fn=_last_ride_max_deceleration_value,
     ),
     BMWLastRideSensorEntityDescription(
@@ -742,7 +739,9 @@ AGGREGATE_DESCRIPTIONS: tuple[BMWLastRideSensorEntityDescription, ...] = (
         key="highest_lean_angle",
         translation_key="highest_lean_angle",
         name="Highest lean angle",
+        native_unit_of_measurement="°",
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
         icon="mdi:angle-acute",
         value_fn=_highest_lean_angle_value,
     ),

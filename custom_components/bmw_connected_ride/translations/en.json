@@ -20,7 +20,6 @@
       "last_ride_distance": { "name": "Last ride distance" },
       "last_ride_duration": { "name": "Last ride duration" },
       "last_ride_avg_speed": { "name": "Last ride avg speed" },
-      "last_ride_max_speed": { "name": "Last ride max speed" },
       "last_ride_max_temp": { "name": "Last ride max temperature" },
       "last_ride_min_temp": { "name": "Last ride min temperature" },
       "last_ride_max_elevation": { "name": "Last ride max elevation" },

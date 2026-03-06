@@ -34,7 +34,7 @@ SAMPLE_BIKES = [
         "fuelLevel": 72,
         "remainingRange": 245000.0,
         "lastConnectedTime": 1735689600,
-        "hashedLongVin": "abc123hash",
+        "vehicleId": "abc123hash",
         "_deleted": False,
     },
     {
@@ -43,7 +43,7 @@ SAMPLE_BIKES = [
         "fuelLevel": 45,
         "remainingRange": 120000.0,
         "lastConnectedTime": 1735600000,
-        "hashedLongVin": "def456hash",
+        "vehicleId": "def456hash",
         "_deleted": False,
     },
 ]

@@ -42,7 +42,6 @@ from custom_components.bmw_connected_ride.sensor import (
     _last_ride_distance_value,
     _last_ride_duration_value,
     _last_ride_avg_speed_value,
-    _last_ride_max_speed_value,
     _last_ride_max_temp_value,
     _last_ride_min_temp_value,
     _last_ride_max_elevation_value,
@@ -648,7 +647,7 @@ class TestAsyncSetupEntry:
         added_entities = []
         async_add_entities = MagicMock(side_effect=lambda e: added_entities.extend(e))
         await async_setup_entry(MagicMock(), entry, async_add_entities)
-        assert len(added_entities) == 37
+        assert len(added_entities) == 36
 
     @pytest.mark.asyncio
     async def test_creates_seventyfour_sensors_for_two_bikes(self):
@@ -660,7 +659,7 @@ class TestAsyncSetupEntry:
         added_entities = []
         async_add_entities = MagicMock(side_effect=lambda e: added_entities.extend(e))
         await async_setup_entry(MagicMock(), entry, async_add_entities)
-        assert len(added_entities) == 74
+        assert len(added_entities) == 72
 
     @pytest.mark.asyncio
     async def test_all_entities_are_sensor_types(self):
@@ -746,14 +745,6 @@ class TestLastRideAvgSpeedValue:
 
     def test_returns_none_when_empty(self):
         assert _last_ride_avg_speed_value([]) is None
-
-
-class TestLastRideMaxSpeedValue:
-    def test_returns_max_speed(self):
-        assert _last_ride_max_speed_value(SAMPLE_TRACKS) == 120.3
-
-    def test_returns_none_when_empty(self):
-        assert _last_ride_max_speed_value([]) is None
 
 
 class TestLastRideTemperatureValues:
@@ -892,8 +883,8 @@ class TestHighestLeanAngleValue:
 
 
 class TestLastRideDescriptions:
-    def test_fourteen_descriptions_defined(self):
-        assert len(LAST_RIDE_DESCRIPTIONS) == 14
+    def test_thirteen_descriptions_defined(self):
+        assert len(LAST_RIDE_DESCRIPTIONS) == 13
 
     def test_all_have_explicit_name(self):
         for desc in LAST_RIDE_DESCRIPTIONS:
