@@ -36,10 +36,14 @@
       "avg_ride_distance": { "name": "Average ride distance" },
       "avg_ride_duration": { "name": "Average ride duration" },
       "longest_ride": { "name": "Longest ride" },
-      "highest_lean_angle": { "name": "Highest lean angle" }
+      "highest_lean_angle": { "name": "Highest lean angle" },
+      "fuel_tank_capacity": { "name": "Fuel tank capacity" },
+      "construction_date": { "name": "Construction date" }
     },
     "device_tracker": {
-      "gps_location": { "name": "GPS location" }
+      "last_connected_location": { "name": "Last connected location" },
+      "last_ride_start": { "name": "Last ride start" },
+      "last_ride_end": { "name": "Last ride end" }
     },
     "image": {
       "sideViews": { "name": "Side view" },

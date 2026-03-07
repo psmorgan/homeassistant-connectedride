@@ -1,14 +1,16 @@
 """BMW Connected Ride integration for Home Assistant."""
 
 import logging
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import BMWApiClient
 from .auth import BMWAuthClient
-from .const import PLATFORMS
+from .const import DOMAIN, PLATFORMS
 from .coordinator import BMWConnectedRideCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +40,18 @@ async def async_setup_entry(
 
     await coordinator.async_config_entry_first_refresh()
     await coordinator.async_fetch_vehicle_info()
+
+    # Enrich device registry with model info from vehicle info API
+    device_registry = dr.async_get(hass)
+    for vin, vi in coordinator.vehicle_info.items():
+        device = device_registry.async_get_device(identifiers={(DOMAIN, vin)})
+        if device is not None:
+            updates: dict[str, Any] = {}
+            model = vi.get("model")
+            if model:
+                updates["model"] = model
+            if updates:
+                device_registry.async_update_device(device.id, **updates)
 
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

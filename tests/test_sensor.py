@@ -20,9 +20,11 @@ from custom_components.bmw_connected_ride.sensor import (
     BMWBikeSensorEntityDescription,
     BMWLastRideSensor,
     BMWLastRideSensorEntityDescription,
+    BMWVehicleInfoSensor,
     SENSOR_DESCRIPTIONS,
     LAST_RIDE_DESCRIPTIONS,
     AGGREGATE_DESCRIPTIONS,
+    VEHICLE_INFO_DESCRIPTIONS,
     _fuel_level_value,
     _remaining_range_value,
     _last_sync_value,
@@ -39,6 +41,8 @@ from custom_components.bmw_connected_ride.sensor import (
     _total_connected_duration_value,
     _charging_mode_value,
     _charging_time_estimation_value,
+    _fuel_tank_capacity_value,
+    _construction_date_value,
     _last_ride_distance_value,
     _last_ride_duration_value,
     _last_ride_avg_speed_value,
@@ -372,8 +376,8 @@ class TestChargingTimeEstimationValue:
 class TestSensorDescriptions:
     """Tests for SENSOR_DESCRIPTIONS tuple."""
 
-    def test_sixteen_descriptions_defined(self):
-        """Sixteen sensor types defined (11 existing + 5 new)."""
+    def test_sixteen_bike_descriptions_defined(self):
+        """Sixteen bike sensor types defined (11 existing + 5 new)."""
         assert len(SENSOR_DESCRIPTIONS) == 16
 
     def test_fuel_level_description(self):
@@ -638,41 +642,44 @@ class TestAsyncSetupEntry:
     """Tests for async_setup_entry."""
 
     @pytest.mark.asyncio
-    async def test_creates_thirtyseven_sensors_per_bike(self):
-        """37 sensors per bike: 16 bike + 14 last-ride + 7 aggregate."""
+    async def test_creates_thirtyeight_sensors_per_bike(self):
+        """38 sensors per bike: 16 bike + 13 last-ride + 7 aggregate + 2 vehicle info."""
         coordinator = _make_mock_coordinator({"VIN001": BIKE_WITH_NAME})
         coordinator.tracks_data = {"VIN001": []}
+        coordinator.vehicle_info = {"VIN001": {}}
         entry = MagicMock()
         entry.runtime_data = coordinator
         added_entities = []
         async_add_entities = MagicMock(side_effect=lambda e: added_entities.extend(e))
         await async_setup_entry(MagicMock(), entry, async_add_entities)
-        assert len(added_entities) == 36
+        assert len(added_entities) == 38
 
     @pytest.mark.asyncio
-    async def test_creates_seventyfour_sensors_for_two_bikes(self):
-        """2 bikes = 74 entities total."""
+    async def test_creates_seventysix_sensors_for_two_bikes(self):
+        """2 bikes = 76 entities total."""
         coordinator = _make_mock_coordinator({"VIN001": BIKE_WITH_NAME, "VIN002": BIKE_NO_NAME})
         coordinator.tracks_data = {"VIN001": [], "VIN002": []}
+        coordinator.vehicle_info = {"VIN001": {}, "VIN002": {}}
         entry = MagicMock()
         entry.runtime_data = coordinator
         added_entities = []
         async_add_entities = MagicMock(side_effect=lambda e: added_entities.extend(e))
         await async_setup_entry(MagicMock(), entry, async_add_entities)
-        assert len(added_entities) == 72
+        assert len(added_entities) == 76
 
     @pytest.mark.asyncio
     async def test_all_entities_are_sensor_types(self):
-        """All created entities are BMWBikeSensor or BMWLastRideSensor."""
+        """All created entities are BMWBikeSensor, BMWLastRideSensor, or BMWVehicleInfoSensor."""
         coordinator = _make_mock_coordinator({"VIN001": BIKE_WITH_NAME})
         coordinator.tracks_data = {"VIN001": []}
+        coordinator.vehicle_info = {"VIN001": {}}
         entry = MagicMock()
         entry.runtime_data = coordinator
         added_entities = []
         async_add_entities = MagicMock(side_effect=lambda e: added_entities.extend(e))
         await async_setup_entry(MagicMock(), entry, async_add_entities)
         for entity in added_entities:
-            assert isinstance(entity, (BMWBikeSensor, BMWLastRideSensor))
+            assert isinstance(entity, (BMWBikeSensor, BMWLastRideSensor, BMWVehicleInfoSensor))
 
 
 # ---------------------------------------------------------------------------
@@ -939,3 +946,185 @@ class TestBMWLastRideSensor:
         coordinator.tracks_data = {vin: []}
         sensor = BMWLastRideSensor(coordinator, vin, LAST_RIDE_DESCRIPTIONS[0])
         assert sensor._attr_device_info["identifiers"] == {(DOMAIN, vin)}
+
+
+# ---------------------------------------------------------------------------
+# Last ride distance extra_state_attributes (GPS coordinates)
+# ---------------------------------------------------------------------------
+
+SAMPLE_TRACK_WITH_GPS = {
+    "bikeId": "abc123hash",
+    "startTimestamp": 1735689600,
+    "rideDistance": 45000,
+    "startLat": 48.123456,
+    "startLon": 11.654321,
+    "endLat": 48.234567,
+    "endLon": 11.765432,
+}
+
+
+class TestLastRideDistanceGpsAttributes:
+    """Tests for start/end GPS coordinates on last_ride_distance sensor."""
+
+    def test_has_start_end_gps(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.tracks_data = {vin: [SAMPLE_TRACK_WITH_GPS]}
+        desc = [d for d in LAST_RIDE_DESCRIPTIONS if d.key == "last_ride_distance"][0]
+        sensor = BMWLastRideSensor(coordinator, vin, desc)
+        attrs = sensor.extra_state_attributes
+        assert attrs == {
+            "start_latitude": 48.123456,
+            "start_longitude": 11.654321,
+            "end_latitude": 48.234567,
+            "end_longitude": 11.765432,
+        }
+
+    def test_none_when_no_tracks(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.tracks_data = {vin: []}
+        desc = [d for d in LAST_RIDE_DESCRIPTIONS if d.key == "last_ride_distance"][0]
+        sensor = BMWLastRideSensor(coordinator, vin, desc)
+        assert sensor.extra_state_attributes is None
+
+    def test_none_on_non_distance_sensor(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.tracks_data = {vin: [SAMPLE_TRACK_WITH_GPS]}
+        desc = [d for d in LAST_RIDE_DESCRIPTIONS if d.key == "last_ride_duration"][0]
+        sensor = BMWLastRideSensor(coordinator, vin, desc)
+        assert sensor.extra_state_attributes is None
+
+    def test_none_when_gps_fields_missing(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.tracks_data = {vin: [{"rideDistance": 45000}]}
+        desc = [d for d in LAST_RIDE_DESCRIPTIONS if d.key == "last_ride_distance"][0]
+        sensor = BMWLastRideSensor(coordinator, vin, desc)
+        assert sensor.extra_state_attributes is None
+
+
+# ---------------------------------------------------------------------------
+# Vehicle info sensor tests
+# ---------------------------------------------------------------------------
+
+SAMPLE_VEHICLE_INFO = {
+    "model": "R 1250 GS Adventure",
+    "fuelCapacity": 30.0,
+    "constructionDate": "2022-09-29T00:00:00.000+0000",
+    "hasSensorBox": True,
+    "isElectricVehicle": False,
+    "hasV2bCapability": True,
+}
+
+
+class TestFuelTankCapacityValue:
+    def test_returns_float(self):
+        assert _fuel_tank_capacity_value(SAMPLE_VEHICLE_INFO) == 30.0
+
+    def test_returns_none_when_missing(self):
+        assert _fuel_tank_capacity_value({}) is None
+
+
+class TestConstructionDateValue:
+    def test_strips_time_from_full_iso(self):
+        assert _construction_date_value(SAMPLE_VEHICLE_INFO) == "2022-09-29"
+
+    def test_short_format_unchanged(self):
+        assert _construction_date_value({"constructionDate": "2023-03"}) == "2023-03"
+
+    def test_returns_none_when_missing(self):
+        assert _construction_date_value({}) is None
+
+
+class TestVehicleInfoDescriptions:
+    def test_two_descriptions_defined(self):
+        assert len(VEHICLE_INFO_DESCRIPTIONS) == 2
+
+    def test_fuel_tank_capacity_key(self):
+        desc = [d for d in VEHICLE_INFO_DESCRIPTIONS if d.key == "fuel_tank_capacity"][0]
+        assert desc.entity_category is not None  # DIAGNOSTIC
+
+    def test_construction_date_key(self):
+        desc = [d for d in VEHICLE_INFO_DESCRIPTIONS if d.key == "construction_date"][0]
+        assert desc.entity_category is not None  # DIAGNOSTIC
+
+    def test_all_have_explicit_name(self):
+        for desc in VEHICLE_INFO_DESCRIPTIONS:
+            assert desc.name is not None, f"{desc.key}: name must be set"
+
+
+class TestBMWVehicleInfoSensor:
+    def test_reads_from_vehicle_info(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.vehicle_info = {vin: SAMPLE_VEHICLE_INFO}
+        desc = [d for d in VEHICLE_INFO_DESCRIPTIONS if d.key == "fuel_tank_capacity"][0]
+        sensor = BMWVehicleInfoSensor(coordinator, vin, desc)
+        assert sensor.native_value == 30.0
+
+    def test_returns_none_when_no_vehicle_info(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.vehicle_info = {}
+        desc = [d for d in VEHICLE_INFO_DESCRIPTIONS if d.key == "fuel_tank_capacity"][0]
+        sensor = BMWVehicleInfoSensor(coordinator, vin, desc)
+        assert sensor.native_value is None
+
+    def test_construction_date_value(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.vehicle_info = {vin: SAMPLE_VEHICLE_INFO}
+        desc = [d for d in VEHICLE_INFO_DESCRIPTIONS if d.key == "construction_date"][0]
+        sensor = BMWVehicleInfoSensor(coordinator, vin, desc)
+        assert sensor.native_value == "2022-09-29"
+
+    def test_unique_id(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.vehicle_info = {vin: SAMPLE_VEHICLE_INFO}
+        desc = [d for d in VEHICLE_INFO_DESCRIPTIONS if d.key == "fuel_tank_capacity"][0]
+        sensor = BMWVehicleInfoSensor(coordinator, vin, desc)
+        assert sensor._attr_unique_id == f"{vin}_fuel_tank_capacity"
+
+    def test_device_info(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.vehicle_info = {vin: SAMPLE_VEHICLE_INFO}
+        desc = [d for d in VEHICLE_INFO_DESCRIPTIONS if d.key == "fuel_tank_capacity"][0]
+        sensor = BMWVehicleInfoSensor(coordinator, vin, desc)
+        assert sensor._attr_device_info["identifiers"] == {(DOMAIN, vin)}
+
+
+class TestConstructionDateCapabilityAttributes:
+    """Tests for capability flags on construction_date sensor."""
+
+    def test_has_capability_flags(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.vehicle_info = {vin: SAMPLE_VEHICLE_INFO}
+        desc = [d for d in VEHICLE_INFO_DESCRIPTIONS if d.key == "construction_date"][0]
+        sensor = BMWVehicleInfoSensor(coordinator, vin, desc)
+        attrs = sensor.extra_state_attributes
+        assert attrs == {
+            "has_sensor_box": True,
+            "is_electric_vehicle": False,
+            "has_v2b_capability": True,
+        }
+
+    def test_none_when_no_vehicle_info(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.vehicle_info = {}
+        desc = [d for d in VEHICLE_INFO_DESCRIPTIONS if d.key == "construction_date"][0]
+        sensor = BMWVehicleInfoSensor(coordinator, vin, desc)
+        assert sensor.extra_state_attributes is None
+
+    def test_none_on_fuel_tank_sensor(self):
+        vin = "WB10X0X00X0000001"
+        coordinator = _make_mock_coordinator({vin: BIKE_WITH_NAME})
+        coordinator.vehicle_info = {vin: SAMPLE_VEHICLE_INFO}
+        desc = [d for d in VEHICLE_INFO_DESCRIPTIONS if d.key == "fuel_tank_capacity"][0]
+        sensor = BMWVehicleInfoSensor(coordinator, vin, desc)
+        assert sensor.extra_state_attributes is None

@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.components.sensor.const import SensorDeviceClass, SensorStateClass
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfPressure, UnitOfSpeed, UnitOfTemperature, UnitOfTime
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfPressure, UnitOfSpeed, UnitOfTemperature, UnitOfTime, UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -304,6 +304,42 @@ SENSOR_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
 )
 
 
+def _fuel_tank_capacity_value(vi: dict[str, Any]) -> float | None:
+    """Extract fuel tank capacity in liters from vehicle info."""
+    return vi.get("fuelCapacity")  # type: ignore[return-value]  # API returns float or None; dict.get type is unknown
+
+
+def _construction_date_value(vi: dict[str, Any]) -> str | None:
+    """Extract construction date (date only) from vehicle info."""
+    raw: str | None = vi.get("constructionDate")  # type: ignore[return-value]
+    if raw is None:
+        return None
+    try:
+        return datetime.fromisoformat(raw).strftime("%Y-%m-%d")
+    except ValueError:
+        return raw
+
+
+VEHICLE_INFO_DESCRIPTIONS: tuple[BMWBikeSensorEntityDescription, ...] = (
+    BMWBikeSensorEntityDescription(
+        key="fuel_tank_capacity",
+        translation_key="fuel_tank_capacity",
+        name="Fuel tank capacity",
+        native_unit_of_measurement=UnitOfVolume.LITERS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_fuel_tank_capacity_value,
+    ),
+    BMWBikeSensorEntityDescription(
+        key="construction_date",
+        translation_key="construction_date",
+        name="Construction date",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_construction_date_value,
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: BMWConnectedRideConfigEntry,
@@ -311,7 +347,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up BMW Connected Ride sensor entities from a config entry."""
     coordinator: BMWConnectedRideCoordinator = entry.runtime_data
-    entities: list[BMWBikeSensor | BMWLastRideSensor] = []
+    entities: list[BMWBikeSensor | BMWLastRideSensor | BMWVehicleInfoSensor] = []
     for vin in coordinator.data:
         for description in SENSOR_DESCRIPTIONS:
             entities.append(BMWBikeSensor(coordinator, vin, description))
@@ -319,6 +355,8 @@ async def async_setup_entry(
             entities.append(BMWLastRideSensor(coordinator, vin, description))
         for description in AGGREGATE_DESCRIPTIONS:
             entities.append(BMWLastRideSensor(coordinator, vin, description))
+        for description in VEHICLE_INFO_DESCRIPTIONS:
+            entities.append(BMWVehicleInfoSensor(coordinator, vin, description))
     async_add_entities(entities)
 
 
@@ -778,3 +816,76 @@ class BMWLastRideSensor(CoordinatorEntity[BMWConnectedRideCoordinator], SensorEn
         """Return the sensor value from coordinator tracks data."""
         tracks = self.coordinator.tracks_data.get(self._vin, [])
         return self.entity_description.value_fn(tracks)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:  # type: ignore[override]  # HA base uses cached_property; runtime behavior is correct
+        """Return start/end GPS coordinates on last_ride_distance sensor."""
+        if self.entity_description.key != "last_ride_distance":
+            return None
+        tracks = self.coordinator.tracks_data.get(self._vin, [])
+        if not tracks:
+            return None
+        track = tracks[0]
+        attr_map = {
+            "startLat": "start_latitude",
+            "startLon": "start_longitude",
+            "endLat": "end_latitude",
+            "endLon": "end_longitude",
+        }
+        attrs: dict[str, Any] = {}
+        for api_key, attr_name in attr_map.items():
+            val = track.get(api_key)
+            if val is not None:
+                attrs[attr_name] = val
+        return attrs if attrs else None
+
+
+class BMWVehicleInfoSensor(CoordinatorEntity[BMWConnectedRideCoordinator], SensorEntity):
+    """Sensor from vehicle info (static data fetched once at startup)."""
+
+    _attr_has_entity_name = True
+    entity_description: BMWBikeSensorEntityDescription  # type: ignore[override]  # Narrowing entity_description type for this entity subclass
+
+    def __init__(
+        self,
+        coordinator: BMWConnectedRideCoordinator,
+        vin: str,
+        description: BMWBikeSensorEntityDescription,
+    ) -> None:
+        """Initialize the vehicle info sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description  # type: ignore[override]  # Narrowing entity_description to subclass type; standard HA pattern
+        self._attr_translation_key = description.translation_key
+        self._vin = vin
+        self._attr_unique_id = f"{vin}_{description.key}"
+        bike = coordinator.data[vin]
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, vin)},
+            name=bike.get("name") or vin,
+            manufacturer="BMW Motorrad",
+        )
+
+    @property
+    def native_value(self) -> object | None:  # type: ignore[override]  # HA base uses cached_property; runtime behavior is correct
+        """Return the sensor value from coordinator vehicle info data."""
+        vi = self.coordinator.vehicle_info.get(self._vin)
+        if vi is None:
+            return None
+        return self.entity_description.value_fn(vi)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:  # type: ignore[override]  # HA base uses cached_property; runtime behavior is correct
+        """Return capability flags on construction_date sensor."""
+        if self.entity_description.key != "construction_date":
+            return None
+        vi = self.coordinator.vehicle_info.get(self._vin, {})
+        attrs: dict[str, Any] = {}
+        for api_key, attr_name in (
+            ("hasSensorBox", "has_sensor_box"),
+            ("isElectricVehicle", "is_electric_vehicle"),
+            ("hasV2bCapability", "has_v2b_capability"),
+        ):
+            val = vi.get(api_key)
+            if val is not None:
+                attrs[attr_name] = val
+        return attrs if attrs else None
