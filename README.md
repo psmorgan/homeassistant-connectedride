@@ -8,7 +8,7 @@
 [license-badge]: https://img.shields.io/badge/License-MIT-yellow.svg
 [license-url]: LICENSE
 
-A Home Assistant custom integration for BMW motorcycles using the BMW Connected Ride API. Exposes 37 sensors per motorcycle including telemetry, ride statistics, GPS tracking, and motorcycle images.
+A Home Assistant custom integration for BMW motorcycles using the BMW Connected Ride API. Exposes 38 sensors per motorcycle including telemetry, ride statistics, vehicle info, GPS tracking, and motorcycle images.
 
 ![BMW Connected Ride screenshot](images/screenshot.png)
 
@@ -22,7 +22,7 @@ A Home Assistant custom integration for BMW motorcycles using the BMW Connected 
 - Odometer (mileage) with ABS type info
 - Trip distance
 - Next service date and distance to service
-- GPS device tracker
+- GPS device trackers (bike location + ride start/end locations)
 - Motorcycle images (side views, rider views)
 
 ### Bike Field Sensors
@@ -47,6 +47,12 @@ A Home Assistant custom integration for BMW motorcycles using the BMW Connected 
 - Total and average duration
 - Longest ride distance
 - Highest lean angle
+
+### Vehicle Info
+
+- Fuel tank capacity (disabled by default)
+- Construction date
+- Capability flags as attributes (hasSensorBox, isElectricVehicle, hasV2bCapability)
 
 ## Installation
 
